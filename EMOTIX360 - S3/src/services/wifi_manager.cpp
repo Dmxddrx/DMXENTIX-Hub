@@ -58,6 +58,8 @@ constexpr uint8_t WIFI_EVENT_QUEUE_LENGTH = 24;
 
 constexpr size_t WIFI_FRAME_MAX_LENGTH = 20;
 
+constexpr uint32_t WIFI_TRANSFER_TIMEOUT_MS = 30000;
+
 
 // ------------------------------------------------------------
 // EVENT DEFINITIONS
@@ -859,7 +861,8 @@ bool beginWifiTransfer(const char *frame)
 
     if (ssidLength == 0 ||
         ssidLength > MAX_SSID_LENGTH ||
-        passwordLength > MAX_PASSWORD_LENGTH) {
+        passwordLength > MAX_PASSWORD_LENGTH ||
+        (passwordLength != 0 && passwordLength < 8)) {
 
         return false;
     }
@@ -1205,20 +1208,6 @@ bool processProvisioningFrame(
     if (frame == nullptr || frame[0] == '\0') {
         return false;
     }
-
-    // Expire incomplete transfers after 30 seconds of inactivity.
-    if (transfer.active &&
-        (uint32_t)(millis() - transfer.lastActivityMs) > 30000UL)
-    {
-        resetTransfer();
-
-        publishProvisioningStatus("ERROR");
-
-        Serial.println(
-            "[WIFI] Credential transfer timed out"
-        );
-    }
-
 
     // Only printable ASCII protocol characters are accepted.
     for (const char *p = frame; *p != '\0'; ++p) {
@@ -1587,6 +1576,24 @@ void wifiTask(void *parameter)
             getCandidateCount();
 
 
+        // Check the pending credential-transfer timeout.
+        if (transfer.active)
+        {
+            const uint32_t elapsed =
+                millis() - transfer.lastActivityMs;
+
+            const uint32_t remaining =
+                (elapsed >= WIFI_TRANSFER_TIMEOUT_MS)
+                    ? 0
+                    : WIFI_TRANSFER_TIMEOUT_MS - elapsed;
+
+            waitTicks = pdMS_TO_TICKS(remaining);
+        }
+
+
+        // Calculate the next Wi-Fi connection event timeout.
+        TickType_t connectionWait = portMAX_DELAY;
+
         if (!connected.load(std::memory_order_relaxed))
         {
             if (attemptInProgress)
@@ -1599,7 +1606,7 @@ void wifiTask(void *parameter)
                         ? 0
                         : CONNECT_TIMEOUT_MS - elapsed;
 
-                waitTicks = pdMS_TO_TICKS(remaining);
+                connectionWait = pdMS_TO_TICKS(remaining);
             }
             else if (candidateCount > 0)
             {
@@ -1608,20 +1615,44 @@ void wifiTask(void *parameter)
                         nextSweepMs - millis()
                     );
 
-                waitTicks =
+                connectionWait =
                     (nextSweepMs == 0 || remaining <= 0)
                         ? 0
                         : pdMS_TO_TICKS(remaining);
             }
         }
 
+        // Use whichever event deadline occurs first.
+        if (connectionWait < waitTicks) {
+            waitTicks = connectionWait;
+        }
 
         ManagerMessage message{};
 
-        if (xQueueReceive(
-                wifiEventQueue,
-                &message,
-                waitTicks) == pdTRUE)
+        const BaseType_t messageReceived =
+    xQueueReceive(
+        wifiEventQueue,
+        &message,
+        waitTicks
+    );
+
+
+        // Expire an abandoned transfer even when no new BLE frame arrives.
+        if (transfer.active &&
+            (uint32_t)(millis() - transfer.lastActivityMs) >=
+                WIFI_TRANSFER_TIMEOUT_MS)
+        {
+            resetTransfer();
+
+            publishProvisioningStatus("ERROR");
+
+            Serial.println(
+                "[WIFI] Credential transfer timed out"
+            );
+        }
+
+
+        if (messageReceived == pdTRUE)
         {
             switch (message.event)
             {
@@ -1678,6 +1709,17 @@ void wifiTask(void *parameter)
 
                 case ManagerEvent::DISCONNECTED:
                 {
+                    // Ignore a delayed disconnect event if the station
+                    // has already established another connection.
+                    if (WiFi.status() == WL_CONNECTED)
+                    {
+                        Serial.println(
+                            "[WIFI] Ignoring stale DISCONNECTED event"
+                        );
+
+                        break;
+                    }
+
                     const bool wasConnected =
                         connected.exchange(
                             false,
