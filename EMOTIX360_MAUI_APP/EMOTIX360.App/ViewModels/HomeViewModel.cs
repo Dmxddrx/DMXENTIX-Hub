@@ -26,14 +26,44 @@ public sealed class HomeViewModel : ObservableObject
     // ANIMATION HIGHLIGHT STATE
     // --------------------------------------------------------
 
-    // Actual animation mode reported by the ESP32.
-    private string _activeModeKey = string.Empty;
+    // Actual animation mode most recently reported by the ESP32.
+    private string? _activeModeKey;
 
-    // Temporary optimistic selection while waiting for confirmation.
-    private string? _pendingModeKey;
+    // Temporary app selection while waiting for device confirmation.
+    private string? _pendingAppModeKey;
 
-    // Prevent older timeout tasks clearing newer selections.
+    // Identifies which source made the latest confirmed selection.
+    private ModeSelectionSource _modeSelectionSource =
+        ModeSelectionSource.None;
+
+    // Prevent older timeout tasks from clearing newer selections.
     private int _modeRequestVersion;
+
+    private enum ModeSelectionSource
+    {
+        None,
+        App,
+        Device
+    }
+
+    // Only one animation can be highlighted.
+    public string? HighlightedModeKey =>
+        _pendingAppModeKey ?? _activeModeKey;
+
+    // The highlighted tile displays the appropriate status.
+    public string ModeSelectionStatusText =>
+        _pendingAppModeKey is not null ||
+        _modeSelectionSource == ModeSelectionSource.App
+            ? "Selected"
+            : _modeSelectionSource == ModeSelectionSource.Device
+                ? "Active"
+                : string.Empty;
+
+    private void NotifyModeSelectionChanged()
+    {
+        OnPropertyChanged(nameof(HighlightedModeKey));
+        OnPropertyChanged(nameof(ModeSelectionStatusText));
+    }
 
     public HomeViewModel(
         BluetoothService bluetooth,
@@ -106,21 +136,6 @@ public sealed class HomeViewModel : ObservableObject
     // HIGHLIGHTED ANIMATION
     // --------------------------------------------------------
 
-    public string HighlightedModeKey =>
-        _pendingModeKey ?? _activeModeKey;
-
-
-    private void SetPendingModeKey(string? modeKey)
-    {
-        if (_pendingModeKey == modeKey)
-            return;
-
-        _pendingModeKey = modeKey;
-
-        OnPropertyChanged(nameof(HighlightedModeKey));
-    }
-
-
     public string BrightnessText
     {
         get => _brightnessText;
@@ -164,48 +179,44 @@ public sealed class HomeViewModel : ObservableObject
     {
         if (!IsConnected)
         {
-            DashboardMessage =
-                "Connect to EMOTIX360 before selecting an animation.";
-
+            DashboardMessage = "Connect to EMOTIX360 before selecting an animation.";
             return;
         }
 
-        if (!AnimationModeExtensions.TryParseFirmwareValue(
-                wireName,
-                out AnimationMode mode))
+        if (!AnimationModeExtensions.TryParseFirmwareValue(wireName, out AnimationMode mode))
         {
             DashboardMessage = "Unknown animation mode.";
             return;
         }
 
-        string requestedModeKey = mode.ToFirmwareValue();
+        string selectedModeKey = wireName!.Trim().ToUpperInvariant();
 
-        // Immediately highlight the user's selection.
-        int requestId = ++_modeRequestVersion;
+        int requestVersion = ++_modeRequestVersion;
 
-        SetPendingModeKey(requestedModeKey);
+        // Show the app selection immediately.
+        _pendingAppModeKey = selectedModeKey;
+        NotifyModeSelectionChanged();
 
         try
         {
             await _commands.SetModeAsync(mode);
 
             DashboardMessage =
-                $"Sent {mode.ToDisplayName()} command. " +
-                "Waiting for device confirmation.";
+                $"Sent {mode.ToDisplayName()} command. Waiting for device status.";
 
-            // If the device does not confirm the new mode,
-            // remove the temporary highlight after 4 seconds.
-            _ = ClearPendingModeAfterTimeoutAsync(
-                requestId,
-                requestedModeKey
-            );
+            // Remove the temporary selection if the device does not confirm it.
+            _ = ClearPendingAppSelectionAsync(
+                selectedModeKey,
+                requestVersion);
         }
         catch (Exception ex)
         {
-            // Undo the temporary highlight if transmission fails.
-            if (_modeRequestVersion == requestId)
+            // Only clear this request if a newer selection has not replaced it.
+            if (requestVersion == _modeRequestVersion &&
+                _pendingAppModeKey == selectedModeKey)
             {
-                SetPendingModeKey(null);
+                _pendingAppModeKey = null;
+                NotifyModeSelectionChanged();
             }
 
             DashboardMessage =
@@ -213,31 +224,87 @@ public sealed class HomeViewModel : ObservableObject
         }
     }
 
-
-    // --------------------------------------------------------
-    // REMOVE UNCONFIRMED ANIMATION HIGHLIGHT
-    // --------------------------------------------------------
-
-    private async Task ClearPendingModeAfterTimeoutAsync(
-        int requestId,
-        string requestedModeKey)
+    private async Task ClearPendingAppSelectionAsync(
+    string modeKey,
+    int requestVersion)
     {
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        await MainThread.InvokeOnMainThreadAsync(() =>
+        MainThread.BeginInvokeOnMainThread(() =>
         {
-            // Do not clear a newer request or an already confirmed mode.
-            if (_modeRequestVersion == requestId &&
-                _pendingModeKey == requestedModeKey)
+            if (requestVersion != _modeRequestVersion ||
+                !string.Equals(
+                    _pendingAppModeKey,
+                    modeKey,
+                    StringComparison.Ordinal))
             {
-                SetPendingModeKey(null);
-
-                DashboardMessage =
-                    "Waiting for the latest device animation status.";
+                return;
             }
+
+            // No confirmation arrived. Restore the previously reported mode.
+            _pendingAppModeKey = null;
+            NotifyModeSelectionChanged();
         });
     }
 
+    private void UpdateModeSelectionFromStatus(string reportedMode)
+    {
+        if (_pendingAppModeKey is not null)
+        {
+            // The device confirmed the mode requested by the app.
+            if (string.Equals(
+                reportedMode,
+                _pendingAppModeKey,
+                StringComparison.Ordinal))
+            {
+                _activeModeKey = reportedMode;
+                _pendingAppModeKey = null;
+
+                _modeSelectionSource = ModeSelectionSource.App;
+
+                // Invalidate the pending timeout.
+                ++_modeRequestVersion;
+            }
+            else if (_activeModeKey is null)
+            {
+                // First telemetry packet establishes the previous device mode.
+                // Keep the app selection pending until it is confirmed.
+                _activeModeKey = reportedMode;
+                _modeSelectionSource = ModeSelectionSource.Device;
+            }
+            else if (!string.Equals(
+                reportedMode,
+                _activeModeKey,
+                StringComparison.Ordinal))
+            {
+                // The device reported a different mode while an app selection
+                // was pending. Treat it as a physical device-button override.
+                _activeModeKey = reportedMode;
+                _pendingAppModeKey = null;
+
+                _modeSelectionSource = ModeSelectionSource.Device;
+
+                // Invalidate the pending app-selection timeout.
+                ++_modeRequestVersion;
+            }
+        }
+        else
+        {
+            // No app request is pending. A new reported mode means the device
+            // changed its animation, normally through the GPIO14 button.
+            if (_activeModeKey is null ||
+                !string.Equals(
+                    reportedMode,
+                    _activeModeKey,
+                    StringComparison.Ordinal))
+            {
+                _activeModeKey = reportedMode;
+                _modeSelectionSource = ModeSelectionSource.Device;
+            }
+        }
+
+        NotifyModeSelectionChanged();
+    }
 
     private async Task ApplyBrightnessAsync()
     {
@@ -270,7 +337,8 @@ public sealed class HomeViewModel : ObservableObject
 
             if (!connected)
             {
-                ClearAnimationHighlight();
+
+                ClearModeSelectionState();
 
                 ActiveModeText = "--";
                 BrightnessText = "--";
@@ -290,7 +358,8 @@ public sealed class HomeViewModel : ObservableObject
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            ClearAnimationHighlight();
+
+            ClearModeSelectionState();
 
             ActiveModeText = "--";
             BrightnessText = "--";
@@ -298,6 +367,17 @@ public sealed class HomeViewModel : ObservableObject
             MotionText = "--";
             TimeText = "--";
         });
+    }
+    private void ClearModeSelectionState()
+    {
+        ++_modeRequestVersion;
+
+        _activeModeKey = null;
+        _pendingAppModeKey = null;
+
+        _modeSelectionSource = ModeSelectionSource.None;
+
+        NotifyModeSelectionChanged();
     }
 
     private void ApplyStatus(DeviceStatus status)
@@ -308,44 +388,17 @@ public sealed class HomeViewModel : ObservableObject
 
         if (!string.IsNullOrWhiteSpace(status.Mode))
         {
-            string reportedMode =
-                status.Mode.Trim().ToUpperInvariant();
-
-            // Check whether the actual device mode has changed.
-            bool deviceModeChanged =
-                !string.Equals(
-                    _activeModeKey,
-                    reportedMode,
-                    StringComparison.Ordinal
-                );
-
-            // The ESP32 is the source of truth.
-            _activeModeKey = reportedMode;
+            string reportedMode = status.Mode.Trim().ToUpperInvariant();
 
             ActiveModeText = reportedMode.Replace('_', ' ');
 
-            // ----------------------------------------------------
-            // RESOLVE PENDING APP SELECTION
-            // ----------------------------------------------------
-
-            if (_pendingModeKey is not null &&
-                (
-                    _pendingModeKey == reportedMode ||
-                    deviceModeChanged
-                ))
-            {
-                // Either the app command was confirmed,
-                // or another control changed the physical device mode.
-
-                ++_modeRequestVersion;
-
-                SetPendingModeKey(null);
-            }
-            else
-            {
-                OnPropertyChanged(nameof(HighlightedModeKey));
-            }
+            // Handle app selection confirmation or physical device changes.
+            UpdateModeSelectionFromStatus(reportedMode);
         }
+
+        // --------------------------------------------------------
+        // UPDATE BRIGHTNESS
+        // --------------------------------------------------------
 
         if (status.Brightness.HasValue)
         {
@@ -353,10 +406,19 @@ public sealed class HomeViewModel : ObservableObject
             BrightnessValue = status.Brightness.Value;
         }
 
-        if (status.WifiConnected.HasValue)
-            WifiText = status.WifiConnected.Value ? "ONLINE" : "OFFLINE";
+        // --------------------------------------------------------
+        // UPDATE WI-FI
+        // --------------------------------------------------------
 
-        // Display actual MPU6050 orientation.
+        if (status.WifiConnected.HasValue)
+        {
+            WifiText = status.WifiConnected.Value ? "ONLINE" : "OFFLINE";
+        }
+
+        // --------------------------------------------------------
+        // UPDATE MPU6050 ORIENTATION
+        // --------------------------------------------------------
+
         if (status.PitchDegrees.HasValue &&
             status.RollDegrees.HasValue)
         {
@@ -369,7 +431,10 @@ public sealed class HomeViewModel : ObservableObject
             MotionText = "NO DATA";
         }
 
-        // Display NTP synchronization status.
+        // --------------------------------------------------------
+        // UPDATE NTP SYNCHRONIZATION STATUS
+        // --------------------------------------------------------
+
         if (status.TimeValid.HasValue)
         {
             TimeText = status.TimeValid.Value
@@ -377,17 +442,14 @@ public sealed class HomeViewModel : ObservableObject
                 : "NOT SYNCHRONIZED";
         }
 
+        // --------------------------------------------------------
+        // UPDATE DASHBOARD MESSAGE
+        // --------------------------------------------------------
+
         if (IsConnected)
-            DashboardMessage = $"Last device update: {status.ReceivedAt.ToLocalTime():HH:mm:ss}";
-    }
-    private void ClearAnimationHighlight()
-    {
-        _activeModeKey = string.Empty;
-
-        _pendingModeKey = null;
-
-        ++_modeRequestVersion;
-
-        OnPropertyChanged(nameof(HighlightedModeKey));
+        {
+            DashboardMessage =
+                $"Last device update: {status.ReceivedAt.ToLocalTime():HH:mm:ss}";
+        }
     }
 }
