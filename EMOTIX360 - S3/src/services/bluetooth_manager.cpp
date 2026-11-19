@@ -1,5 +1,6 @@
 #include "bluetooth_manager.h"
 #include "buzzer.h"
+#include "wifi_manager.h"
 
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -37,7 +38,10 @@ constexpr char COMMAND_UUID[] =
 
 constexpr char STATUS_UUID[] =
     "e3223119-9445-4e96-a4a1-85358c4046a2";
-
+    
+// Dedicated Wi-Fi credential provisioning characteristic.
+constexpr char WIFI_PROVISION_UUID[] =
+    "d3600001-5a3b-4b3f-9c21-8f5a2d7c0101";
 
 // ============================================================
 // FREERTOS CONFIGURATION
@@ -62,6 +66,7 @@ BLECharacteristic *commandCharacteristic = nullptr;
 
 BLECharacteristic *statusCharacteristic = nullptr;
 
+BLECharacteristic *wifiProvisioningCharacteristic = nullptr;
 
 // ============================================================
 // INTERNAL STATE
@@ -168,6 +173,65 @@ class CommandCallbacks final :
             "[BLE] Command received: %s\n",
             value.c_str()
         );
+    }
+};
+
+// ------------------------------------------------------------
+// WIFI PROVISIONING CHARACTERISTIC CALLBACK
+// ------------------------------------------------------------
+
+class WifiProvisioningCallbacks final :
+    public BLECharacteristicCallbacks {
+
+    void onWrite(
+        BLECharacteristic *characteristic
+    ) override
+    {
+        if (characteristic == nullptr) {
+            return;
+        }
+
+
+        const String value =
+            characteristic->getValue();
+
+
+        const size_t length = value.length();
+
+
+        if (length == 0 ||
+            length > 20) {
+
+            BluetoothManager::setWifiProvisioningStatus(
+                "ERROR",
+                WifiManager::getStoredNetworkCount()
+            );
+
+            Serial.println(
+                "[BLE] Invalid Wi-Fi provisioning frame length"
+            );
+
+            return;
+        }
+
+
+        // Do not print the frame contents.
+        // Frames contain Base64-encoded credentials.
+        if (!WifiManager::enqueueProvisioningFrame(
+                value.c_str(),
+                length)) {
+
+            BluetoothManager::setWifiProvisioningStatus(
+                "ERROR",
+                WifiManager::getStoredNetworkCount()
+            );
+
+            Serial.println(
+                "[BLE] Wi-Fi provisioning queue unavailable"
+            );
+
+            return;
+        }
     }
 };
 
@@ -324,15 +388,7 @@ bool begin()
             BLECharacteristic::PROPERTY_NOTIFY
         );
 
-    #if defined(CONFIG_BLUEDROID_ENABLED)
-    // Client Characteristic Configuration Descriptor.
-    // Allows Android applications to subscribe to notifications.
-
-    statusCharacteristic->addDescriptor(
-        new BLE2902()
-    );
-    #endif
-
+        
     if (statusCharacteristic == nullptr)
     {
         Serial.println(
@@ -342,8 +398,71 @@ bool begin()
         return false;
     }
 
+    #if defined(CONFIG_BLUEDROID_ENABLED)
+    // Client Characteristic Configuration Descriptor.
+    // Allows Android applications to subscribe to notifications.
+
+    statusCharacteristic->addDescriptor(
+        new BLE2902()
+    );
+    #endif
+
     statusCharacteristic->setValue(
         String("booting")
+    );
+
+    // --------------------------------------------------------
+    // WIFI PROVISIONING CHARACTERISTIC
+    // --------------------------------------------------------
+
+    wifiProvisioningCharacteristic =
+        service->createCharacteristic(
+            WIFI_PROVISION_UUID,
+            BLECharacteristic::PROPERTY_READ |
+            BLECharacteristic::PROPERTY_WRITE |
+            BLECharacteristic::PROPERTY_NOTIFY
+        );
+
+
+    if (wifiProvisioningCharacteristic == nullptr)
+    {
+        Serial.println(
+            "[BLE] Wi-Fi provisioning characteristic creation failed"
+        );
+
+        return false;
+    }
+
+
+    wifiProvisioningCharacteristic->setCallbacks(
+        new WifiProvisioningCallbacks()
+    );
+
+
+    #if defined(CONFIG_BLUEDROID_ENABLED)
+
+    // Client Characteristic Configuration Descriptor.
+    // Allows the mobile app to subscribe to provisioning status.
+
+    wifiProvisioningCharacteristic->addDescriptor(
+        new BLE2902()
+    );
+
+    #endif
+
+
+    // Initial provisioning state.
+    char initialWifiStatus[40];
+
+    snprintf(
+        initialWifiStatus,
+        sizeof(initialWifiStatus),
+        "WCFG=IDLE,WCNT=%u",
+        WifiManager::getStoredNetworkCount()
+    );
+
+    wifiProvisioningCharacteristic->setValue(
+        String(initialWifiStatus)
     );
 
 
@@ -588,6 +707,42 @@ void setStatus(
     if (isConnected())
     {
         statusCharacteristic->notify();
+    }
+}
+
+// ------------------------------------------------------------
+// PUBLISH WIFI PROVISIONING STATUS
+// ------------------------------------------------------------
+
+void setWifiProvisioningStatus(
+    const char *status,
+    uint8_t storedCount
+)
+{
+    if (wifiProvisioningCharacteristic == nullptr) {
+        return;
+    }
+
+
+    char message[40];
+
+    snprintf(
+        message,
+        sizeof(message),
+        "WCFG=%s,WCNT=%u",
+        (status != nullptr) ? status : "ERROR",
+        storedCount
+    );
+
+
+    wifiProvisioningCharacteristic->setValue(
+        String(message)
+    );
+
+
+    if (isConnected())
+    {
+        wifiProvisioningCharacteristic->notify();
     }
 }
 

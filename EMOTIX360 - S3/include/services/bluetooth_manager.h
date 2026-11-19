@@ -35,6 +35,17 @@ void setStatus(
 // Retrieve the latest command received from the mobile app.
 bool takeCommand(char *out, size_t outSize);
 
+// ------------------------------------------------------------
+// WIFI PROVISIONING STATUS
+// ------------------------------------------------------------
+
+// Publish Wi-Fi provisioning status through the dedicated
+// Wi-Fi provisioning characteristic.
+void setWifiProvisioningStatus(
+    const char *status,
+    uint8_t storedCount
+);
+
 }
 
 #endif
