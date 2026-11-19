@@ -19,10 +19,13 @@ public static class MauiProgram
         builder.Services.AddSingleton<BluetoothService>();
         builder.Services.AddSingleton<DeviceCommandService>();
         builder.Services.AddSingleton<DeviceStatusService>();
+        builder.Services.AddSingleton<WifiProvisioningService>();
+        builder.Services.AddSingleton<WifiNetworkInfoService>();
 
         // Shared view-model state is retained while navigating between tabs.
         builder.Services.AddSingleton<HomeViewModel>();
         builder.Services.AddSingleton<DeviceViewModel>();
+        builder.Services.AddSingleton<WifiProvisioningViewModel>();
 
         // Pages are resolved by AppShell's DataTemplate factories.
         builder.Services.AddSingleton<HomePage>();

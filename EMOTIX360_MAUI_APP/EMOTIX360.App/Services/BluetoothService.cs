@@ -1,12 +1,13 @@
-using System.Diagnostics;
-using System.Text;
 using Microsoft.Maui.ApplicationModel;
 using Plugin.BLE;
 using Plugin.BLE.Abstractions;
 using Plugin.BLE.Abstractions.Contracts;
 using Plugin.BLE.Abstractions.EventArgs;
-using ModelDeviceInfo = EMOTIX360.App.Models.DeviceInfo;
+using System.Diagnostics;
+using System.Text;
 using System.Threading;
+using static Microsoft.Maui.ApplicationModel.Permissions;
+using ModelDeviceInfo = EMOTIX360.App.Models.DeviceInfo;
 
 namespace EMOTIX360.App.Services;
 
@@ -27,6 +28,9 @@ public sealed class BluetoothService
     public static readonly Guid StatusCharacteristicUuid =
         Guid.Parse("e3223119-9445-4e96-a4a1-85358c4046a2");
 
+    public static readonly Guid WifiProvisioningCharacteristicUuid =
+        Guid.Parse("d3600001-5a3b-4b3f-9c21-8f5a2d7c0101");
+
     private readonly IBluetoothLE _bluetoothLe;
     private readonly IAdapter _adapter;
     private readonly object _devicesLock = new();
@@ -36,6 +40,10 @@ public sealed class BluetoothService
     private IDevice? _connectedDevice;
     private ICharacteristic? _commandCharacteristic;
     private ICharacteristic? _statusCharacteristic;
+    private ICharacteristic? _wifiProvisioningCharacteristic;
+
+    private EventHandler<CharacteristicUpdatedEventArgs>?
+        _wifiProvisioningUpdatedHandler;
     private EventHandler<CharacteristicUpdatedEventArgs>? _statusUpdatedHandler;
 
     // --------------------------------------------------------
@@ -65,6 +73,8 @@ public sealed class BluetoothService
     public event Action<ModelDeviceInfo>? DeviceDiscovered;
     public event Action<bool, string?>? ConnectionChanged;
     public event Action<string>? StatusPayloadReceived;
+    public event Action<string>? WifiProvisioningStatusPayloadReceived;
+    public string? CurrentWifiProvisioningStatusPayload { get; private set; }
 
     public bool IsBluetoothOn => _bluetoothLe.State == BluetoothState.On;
     public bool IsConnected => _connectedDevice is not null;
@@ -197,6 +207,22 @@ public sealed class BluetoothService
             if (_statusCharacteristic is null)
                 throw new InvalidOperationException("The EMOTIX360 status characteristic was not found.");
 
+            // --------------------------------------------------------
+            // WIFI PROVISIONING CHARACTERISTIC
+            // --------------------------------------------------------
+
+            _wifiProvisioningCharacteristic =
+                await service.GetCharacteristicAsync(
+                    WifiProvisioningCharacteristicUuid
+                );
+
+            if (_wifiProvisioningCharacteristic is null)
+            {
+                throw new InvalidOperationException(
+                    "The EMOTIX360 Wi-Fi provisioning characteristic was not found."
+                );
+            }
+
             _statusUpdatedHandler = OnStatusCharacteristicUpdated;
             _statusCharacteristic.ValueUpdated += _statusUpdatedHandler;
             await _statusCharacteristic.StartUpdatesAsync();
@@ -226,6 +252,43 @@ public sealed class BluetoothService
 
                 Debug.WriteLine(
                     $"[BLE] Initial status read exception: {ex.Message}"
+                );
+            }
+
+            // --------------------------------------------------------
+            // WIFI PROVISIONING STATUS NOTIFICATIONS
+            // --------------------------------------------------------
+
+            _wifiProvisioningUpdatedHandler =
+                OnWifiProvisioningCharacteristicUpdated;
+
+            _wifiProvisioningCharacteristic.ValueUpdated +=
+                _wifiProvisioningUpdatedHandler;
+
+            await _wifiProvisioningCharacteristic.StartUpdatesAsync();
+
+            // Read the current provisioning status and network count.
+            try
+            {
+                var readResult =
+                    await _wifiProvisioningCharacteristic.ReadAsync();
+
+                if (readResult.resultCode == 0)
+                {
+                    PublishWifiProvisioningStatus(readResult.data);
+                }
+                else
+                {
+                    Debug.WriteLine(
+                        "[BLE] Initial Wi-Fi provisioning status read failed. " +
+                        $"GATT result: {readResult.resultCode}"
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    $"[BLE] Wi-Fi provisioning status read exception: {ex.Message}"
                 );
             }
 
@@ -268,6 +331,33 @@ public sealed class BluetoothService
                     {
                         // A lost link may already have stopped notifications.
                         // Continue and explicitly ask the adapter to disconnect.
+                    }
+                }
+                // --------------------------------------------------------
+                // STOP WIFI PROVISIONING NOTIFICATIONS
+                // --------------------------------------------------------
+
+                ICharacteristic? wifiCharacteristic =
+                    _wifiProvisioningCharacteristic;
+
+                EventHandler<CharacteristicUpdatedEventArgs>?
+                    wifiHandler = _wifiProvisioningUpdatedHandler;
+
+                if (wifiCharacteristic is not null)
+                {
+                    if (wifiHandler is not null)
+                    {
+                        wifiCharacteristic.ValueUpdated -= wifiHandler;
+                    }
+
+                    try
+                    {
+                        await wifiCharacteristic.StopUpdatesAsync();
+                    }
+                    catch
+                    {
+                        // The BLE connection may already have been lost.
+                        // Continue with explicit disconnection.
                     }
                 }
 
@@ -341,7 +431,67 @@ public sealed class BluetoothService
             _gattSemaphore.Release();
         }
     }
+    // ========================================================
+    // WIFI PROVISIONING FRAME WRITE
+    // ========================================================
 
+    public async Task WriteWifiProvisioningFrameAsync(string frame)
+    {
+        if (string.IsNullOrEmpty(frame))
+        {
+            throw new ArgumentException(
+                "Wi-Fi provisioning frame cannot be empty.",
+                nameof(frame)
+            );
+        }
+
+        // The ESP32 accepts printable ASCII frames up to 20 bytes.
+        if (frame.Length > 20 ||
+            frame.Any(character => character < '!' || character > '~'))
+        {
+            throw new ArgumentException(
+                "Invalid Wi-Fi provisioning frame. " +
+                "Frames must contain 1–20 printable ASCII characters.",
+                nameof(frame)
+            );
+        }
+
+        byte[] payload = Encoding.ASCII.GetBytes(frame);
+
+        await _gattSemaphore.WaitAsync();
+
+        try
+        {
+            ICharacteristic characteristic =
+                _wifiProvisioningCharacteristic
+                ?? throw new InvalidOperationException(
+                    "The Wi-Fi provisioning characteristic is unavailable."
+                );
+
+            if (!IsConnected)
+            {
+                throw new InvalidOperationException(
+                    "EMOTIX360 is not connected."
+                );
+            }
+
+            int resultCode = await MainThread.InvokeOnMainThreadAsync(
+                () => characteristic.WriteAsync(payload)
+            );
+
+            if (resultCode != 0)
+            {
+                throw new IOException(
+                    "Wi-Fi provisioning frame write failed. " +
+                    $"GATT result code: {resultCode}"
+                );
+            }
+        }
+        finally
+        {
+            _gattSemaphore.Release();
+        }
+    }
     private void OnDeviceDiscovered(object? sender, DeviceEventArgs args)
     {
         IDevice device = args.Device;
@@ -374,6 +524,13 @@ public sealed class BluetoothService
         {
             _statusCharacteristic.ValueUpdated -=
                 _statusUpdatedHandler;
+        }
+
+        if (_wifiProvisioningCharacteristic is not null &&
+            _wifiProvisioningUpdatedHandler is not null)
+        {
+            _wifiProvisioningCharacteristic.ValueUpdated -=
+                _wifiProvisioningUpdatedHandler;
         }
 
         ClearConnectionState();
@@ -409,12 +566,79 @@ public sealed class BluetoothService
         }
     }
 
+    // --------------------------------------------------------
+    // WIFI PROVISIONING NOTIFICATION CALLBACK
+    // --------------------------------------------------------
+
+    private void OnWifiProvisioningCharacteristicUpdated(
+        object? sender,
+        CharacteristicUpdatedEventArgs args)
+    {
+        PublishWifiProvisioningStatus(
+            args.Characteristic.Value
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // PUBLISH WIFI PROVISIONING STATUS
+    // --------------------------------------------------------
+
+    private void PublishWifiProvisioningStatus(byte[]? bytes)
+    {
+        if (bytes is null || bytes.Length == 0)
+            return;
+
+        string payload = Encoding.UTF8.GetString(bytes)
+            .Trim('\0', '\r', '\n', ' ');
+
+        if (string.IsNullOrWhiteSpace(payload))
+            return;
+
+        // Keep the latest device status so Settings can retrieve it
+        // even if its ViewModel is created after BLE connection.
+        CurrentWifiProvisioningStatusPayload = payload;
+
+        WifiProvisioningStatusPayloadReceived?.Invoke(payload);
+    }
+
     private async Task DisconnectAfterFailedConnectAsync(IDevice device)
     {
         try
         {
-            if (_statusCharacteristic is not null && _statusUpdatedHandler is not null)
-                _statusCharacteristic.ValueUpdated -= _statusUpdatedHandler;
+            // Remove normal status notifications.
+            if (_statusCharacteristic is not null &&
+                _statusUpdatedHandler is not null)
+            {
+                _statusCharacteristic.ValueUpdated -=
+                    _statusUpdatedHandler;
+
+                try
+                {
+                    await _statusCharacteristic.StopUpdatesAsync();
+                }
+                catch
+                {
+                    // Continue connection cleanup.
+                }
+            }
+
+            // Remove Wi-Fi provisioning notifications.
+            if (_wifiProvisioningCharacteristic is not null &&
+                _wifiProvisioningUpdatedHandler is not null)
+            {
+                _wifiProvisioningCharacteristic.ValueUpdated -=
+                    _wifiProvisioningUpdatedHandler;
+
+                try
+                {
+                    await _wifiProvisioningCharacteristic.StopUpdatesAsync();
+                }
+                catch
+                {
+                    // Continue connection cleanup.
+                }
+            }
 
             await _adapter.DisconnectDeviceAsync(device);
         }
@@ -425,10 +649,16 @@ public sealed class BluetoothService
         finally
         {
             bool stillOwned = _connectedDevice?.Id == device.Id;
+
             ClearConnectionState();
 
             if (stillOwned)
-                ConnectionChanged?.Invoke(false, "Connection failed.");
+            {
+                ConnectionChanged?.Invoke(
+                    false,
+                    "Connection failed."
+                );
+            }
         }
     }
 
@@ -585,6 +815,13 @@ public sealed class BluetoothService
                     _statusUpdatedHandler;
             }
 
+            if (_wifiProvisioningCharacteristic is not null &&
+                _wifiProvisioningUpdatedHandler is not null)
+            {
+                _wifiProvisioningCharacteristic.ValueUpdated -=
+                    _wifiProvisioningUpdatedHandler;
+            }
+
             // Clear all local connection references.
             ClearConnectionState();
 
@@ -634,6 +871,9 @@ public sealed class BluetoothService
         _commandCharacteristic = null;
         _statusCharacteristic = null;
         _statusUpdatedHandler = null;
+        _wifiProvisioningCharacteristic = null;
+        _wifiProvisioningUpdatedHandler = null;
+        CurrentWifiProvisioningStatusPayload = null;
     }
 
     private async Task StopScanSafelyAsync()
