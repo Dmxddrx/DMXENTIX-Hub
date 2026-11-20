@@ -50,9 +50,6 @@ public sealed class BluetoothService
 
     private const int AUTO_CONNECT_SCAN_DURATION_SECONDS = 8;
 
-    private static readonly TimeSpan AUTO_CONNECT_RETRY_DELAY =
-        TimeSpan.FromSeconds(5);
-
     // Prevent manual and automatic connection operations
     // from running simultaneously.
     private readonly SemaphoreSlim _connectionOperationSemaphore =
@@ -668,6 +665,12 @@ public sealed class BluetoothService
                 }
             }
 
+            ConnectionProgressChanged?.Invoke(
+                IsConnected
+                    ? $"Connected to {ConnectedDeviceName ?? DeviceName}."
+                    : "Automatic connection manager stopped."
+            );
+
             source.Dispose();
 
             Debug.WriteLine(
@@ -689,6 +692,8 @@ public sealed class BluetoothService
         );
 
         IDevice? device = null;
+
+        bool connectionInitialized = false;
 
         try
         {
@@ -723,6 +728,8 @@ public sealed class BluetoothService
 
             await InitializeConnectedDeviceAsync(device);
 
+            connectionInitialized = true;
+
             SaveRememberedDevice(device);
 
             Debug.WriteLine(
@@ -750,8 +757,8 @@ public sealed class BluetoothService
         }
         finally
         {
-            if (device is not null &&
-                !IsConnected &&
+            if (!connectionInitialized &&
+                device is not null &&
                 _connectedDevice?.Id == device.Id)
             {
                 await DisconnectAfterFailedConnectAsync(device);
@@ -773,6 +780,7 @@ public sealed class BluetoothService
         );
 
         IDevice? device = null;
+        bool connectionInitialized = false;
 
         try
         {
@@ -836,6 +844,7 @@ public sealed class BluetoothService
             _connectedDevice = device;
 
             await InitializeConnectedDeviceAsync(device);
+            connectionInitialized = true;
 
             // Update remembered ID if the discovered device has
             // a different identity from the previously saved one.
