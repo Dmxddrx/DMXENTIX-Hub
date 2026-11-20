@@ -2,6 +2,7 @@ using EMOTIX360.App.Models.Devices;
 using EMOTIX360.App.Services.Storage;
 using Microsoft.Maui.Storage;
 using System.Diagnostics;
+using AppDeviceType = EMOTIX360.App.Models.Devices.DeviceType;
 
 namespace EMOTIX360.App.Services.Devices;
 
@@ -406,7 +407,7 @@ public sealed class DeviceRegistryService
             // This is a transitional registry key. A future firmware-provided
             // stable device identity can replace it during the profile migration.
             DeviceId = $"legacy:emotix360:{normalizedBluetoothId}",
-            DeviceType = DeviceType.Emotix360,
+            DeviceType = AppDeviceType.Emotix360,
             DisplayName = BluetoothProductName,
             AdvertisedName = string.IsNullOrWhiteSpace(rememberedName)
                 ? BluetoothProductName
