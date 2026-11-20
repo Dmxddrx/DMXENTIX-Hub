@@ -9,6 +9,7 @@ using System.Threading;
 using static Microsoft.Maui.ApplicationModel.Permissions;
 using ModelDeviceInfo = EMOTIX360.App.Models.DeviceInfo;
 using Microsoft.Maui.Storage;
+using EMOTIX360.App.Services.Devices.Profiles;
 
 #if ANDROID
 using EMOTIX360.App.Platforms.Android;
@@ -22,10 +23,11 @@ namespace EMOTIX360.App.Services;
 /// </summary>
 public sealed class BluetoothService
 {
-    public const string DeviceName = "EMOTIX360";
+    public const string DeviceName =
+    Emotix360DeviceProfile.AdvertisedName;
 
     public static readonly Guid ServiceUuid =
-        Guid.Parse("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+        Emotix360DeviceProfile.ServiceUuid;
 
     public static readonly Guid CommandCharacteristicUuid =
         Guid.Parse("beb5483e-36e1-4688-b7f5-ea07361b26a8");
@@ -36,6 +38,7 @@ public sealed class BluetoothService
     public static readonly Guid WifiProvisioningCharacteristicUuid =
         Guid.Parse("d3600001-5a3b-4b3f-9c21-8f5a2d7c0101");
 
+    private readonly BleCentralService _bleCentral;
     private readonly IBluetoothLE _bluetoothLe;
     private readonly IAdapter _adapter;
     private readonly object _devicesLock = new();
@@ -57,10 +60,6 @@ public sealed class BluetoothService
     // Prevent manual and automatic connection operations
     // from running simultaneously.
     private readonly SemaphoreSlim _connectionOperationSemaphore =
-        new(1, 1);
-
-    // Prevent overlapping BLE scan operations.
-    private readonly SemaphoreSlim _scanSemaphore =
         new(1, 1);
 
     // Protect automatic connection task state.
@@ -96,13 +95,26 @@ public sealed class BluetoothService
 
     private long _lastStatusReceivedUtcTicks;
 
-    public BluetoothService()
+    public BluetoothService(BleCentralService bleCentral)
     {
-        _bluetoothLe = CrossBluetoothLE.Current;
-        _adapter = _bluetoothLe.Adapter;
+        _bleCentral = bleCentral;
 
-        _adapter.DeviceDiscovered += OnDeviceDiscovered;
+        _bluetoothLe = _bleCentral.BluetoothLe;
+        _adapter = _bleCentral.Adapter;
+
+        _bleCentral.DeviceDiscovered += OnDeviceDiscovered;
+
         _adapter.DeviceDisconnected += OnDeviceDisconnected;
+
+        // Clear the connection lookup cache before every scan.
+        _bleCentral.ScanStarting += ClearDiscoveredDevices;
+    }
+    private void ClearDiscoveredDevices()
+    {
+        lock (_devicesLock)
+        {
+            _discoveredDevices.Clear();
+        }
     }
 
     public event Action<ModelDeviceInfo>? DeviceDiscovered;
@@ -166,78 +178,24 @@ public sealed class BluetoothService
     public BluetoothState BluetoothState => _bluetoothLe.State;
 
     /// <summary>Requests the runtime permissions required by the current platform.</summary>
-    public async Task EnsurePermissionsAsync()
+    public Task EnsurePermissionsAsync()
     {
-#if ANDROID
-        PermissionStatus status = await Permissions.RequestAsync<BluetoothRuntimePermission>();
-        if (status != PermissionStatus.Granted)
-            throw new UnauthorizedAccessException("Bluetooth scan/connect permissions were not granted.");
-#endif
-        // iOS displays its Bluetooth permission prompt when CoreBluetooth is first used.
+        return _bleCentral.EnsurePermissionsAsync();
     }
 
-    /// <summary>
-    /// Scans for the exact EMOTIX360 advertised name. The firmware also advertises
-    /// the service UUID; GATT service validation is performed again after connection.
-    /// </summary>
-    public async Task ScanAsync(
+    public Task ScanAsync(
     TimeSpan? scanDuration = null,
     CancellationToken cancellationToken = default)
     {
-        await _scanSemaphore.WaitAsync(cancellationToken);
-
-        try
-        {
-            await EnsurePermissionsAsync();
-
-            if (!IsBluetoothOn)
-            {
-                throw new InvalidOperationException(
-                    "Bluetooth is turned off. Enable Bluetooth and try again."
-                );
-            }
-
-            if (_adapter.IsScanning)
-            {
-                await _adapter.StopScanningForDevicesAsync();
-            }
-
-            lock (_devicesLock)
-            {
-                _discoveredDevices.Clear();
-            }
-
-            _adapter.ScanTimeout =
-                (int)(scanDuration ??
-                    TimeSpan.FromSeconds(10)).TotalMilliseconds;
-
-            using CancellationTokenRegistration registration =
-                cancellationToken.Register(
-                    () => _ = StopScanSafelyAsync()
-                );
-
-            try
-            {
-                await _adapter.StartScanningForDevicesAsync();
-            }
-            finally
-            {
-                if (_adapter.IsScanning)
-                {
-                    await _adapter.StopScanningForDevicesAsync();
-                }
-            }
-        }
-        finally
-        {
-            _scanSemaphore.Release();
-        }
+        return _bleCentral.ScanAsync(
+            scanDuration,
+            cancellationToken
+        );
     }
 
-    public async Task StopScanAsync()
+    public Task StopScanAsync()
     {
-        if (_adapter.IsScanning)
-            await _adapter.StopScanningForDevicesAsync();
+        return _bleCentral.StopScanAsync();
     }
 
     public async Task ConnectAsync(Guid deviceId)
@@ -1151,14 +1109,24 @@ public sealed class BluetoothService
             _gattSemaphore.Release();
         }
     }
-    private void OnDeviceDiscovered(object? sender, DeviceEventArgs args)
+    private void OnDeviceDiscovered(
+    object? sender,
+    DeviceEventArgs args)
     {
         IDevice device = args.Device;
-        if (!string.Equals(device.Name, DeviceName, StringComparison.OrdinalIgnoreCase))
+
+        if (!string.Equals(
+                device.Name,
+                DeviceName,
+                StringComparison.OrdinalIgnoreCase))
+        {
             return;
+        }
 
         lock (_devicesLock)
+        {
             _discoveredDevices[device.Id] = device;
+        }
 
         DeviceDiscovered?.Invoke(
             new ModelDeviceInfo(
@@ -1573,29 +1541,3 @@ public sealed class BluetoothService
         }
     }
 }
-
-#if ANDROID
-/// <summary>Android 12+: Nearby devices permissions. Android 11 and earlier: location for BLE scanning.</summary>
-internal sealed class BluetoothRuntimePermission : Permissions.BasePlatformPermission
-{
-    public override (string androidPermission, bool isRuntime)[] RequiredPermissions
-    {
-        get
-        {
-            if (OperatingSystem.IsAndroidVersionAtLeast(31))
-            {
-                return new[]
-                {
-                    (Android.Manifest.Permission.BluetoothScan, true),
-                    (Android.Manifest.Permission.BluetoothConnect, true)
-                };
-            }
-
-            return new[]
-            {
-                (Android.Manifest.Permission.AccessFineLocation, true)
-            };
-        }
-    }
-}
-#endif

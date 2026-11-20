@@ -1,9 +1,10 @@
-
 using System.Collections.ObjectModel;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using ModelDeviceInfo = EMOTIX360.App.Models.DeviceInfo;
 using EMOTIX360.App.Services;
+using EMOTIX360.App.Models.Devices;
+using EMOTIX360.App.Services.Devices;
 
 namespace EMOTIX360.App.ViewModels;
 
@@ -23,9 +24,14 @@ public sealed class DeviceViewModel : ObservableObject
     private string _statusMessage =
         "Scan to find your nearby EMOTIX360.";
 
-    public DeviceViewModel(BluetoothService bluetooth)
+    private readonly DeviceDiscoveryService _deviceDiscovery;
+
+    public DeviceViewModel(
+        BluetoothService bluetooth,
+        DeviceDiscoveryService deviceDiscovery)
     {
         _bluetooth = bluetooth;
+        _deviceDiscovery = deviceDiscovery;
 
         // ----------------------------------------------------
         // COMMANDS
@@ -50,7 +56,8 @@ public sealed class DeviceViewModel : ObservableObject
         // BLE EVENTS
         // ----------------------------------------------------
 
-        _bluetooth.DeviceDiscovered += OnDeviceDiscovered;
+        _deviceDiscovery.DeviceDiscovered +=
+            OnProfileDeviceDiscovered;
 
         _bluetooth.ConnectionChanged += OnConnectionChanged;
 
@@ -274,9 +281,12 @@ public sealed class DeviceViewModel : ObservableObject
             // the status message.
             if (!_scanStoppedForConnection)
             {
-                StatusMessage = Devices.Count > 0
-                    ? $"Found {Devices.Count} EMOTIX360 device(s). Select one to connect."
-                    : "No EMOTIX360 device found. Check that the ESP32-S3 is powered on and advertising.";
+                int discoveredCount =
+                    _deviceDiscovery.DiscoveredDevices.Count;
+
+                StatusMessage = discoveredCount > 0
+                    ? $"Found {discoveredCount} supported EMOTIX360 device(s). Select one to connect."
+                    : "No supported EMOTIX360 device found. Check that the ESP32-S3 is powered on and advertising.";
             }
         }
         catch (UnauthorizedAccessException ex)
@@ -381,6 +391,17 @@ public sealed class DeviceViewModel : ObservableObject
     // ========================================================
     // HANDLE DISCOVERED DEVICES
     // ========================================================
+    private void OnProfileDeviceDiscovered(
+    DiscoveredDeviceInfo device)
+    {
+        OnDeviceDiscovered(
+            new ModelDeviceInfo(
+                device.Id,
+                device.AdvertisedName,
+                device.Rssi
+            )
+        );
+    }
 
     private void OnDeviceDiscovered(ModelDeviceInfo device)
     {

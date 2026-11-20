@@ -5,6 +5,7 @@ using EMOTIX360.App.ViewModels;
 using EMOTIX360.App.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using EMOTIX360.App.Services.Devices.Profiles;
 
 namespace EMOTIX360.App;
 
@@ -16,9 +17,23 @@ public static class MauiProgram
 
         builder.UseMauiApp<App>();
 
-        // BLE transport and protocol services are singletons so all pages
-        // observe the same connection and status stream.
+        // ----------------------------------------------------
+        // BLE CENTRAL AND PRODUCT DISCOVERY
+        // ----------------------------------------------------
+
+        // One shared BLE adapter and scanner for the application.
+        builder.Services.AddSingleton<BleCentralService>();
+
+        // Supported product profiles.
+        // Initially, only EMOTIX360 is registered.
+        builder.Services.AddSingleton<IDeviceProfile, Emotix360DeviceProfile>();
+
+        // Identifies supported products from raw BLE advertisements.
+        builder.Services.AddSingleton<DeviceDiscoveryService>();
+
+        // Existing EMOTIX360 connection and GATT management.
         builder.Services.AddSingleton<BluetoothService>();
+
         builder.Services.AddSingleton<DeviceCommandService>();
         builder.Services.AddSingleton<DeviceStatusService>();
         builder.Services.AddSingleton<WifiProvisioningService>();
