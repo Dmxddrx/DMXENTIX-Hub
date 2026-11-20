@@ -1,4 +1,6 @@
 using EMOTIX360.App.Services;
+using EMOTIX360.App.Services.Devices;
+using EMOTIX360.App.Services.Storage;
 using EMOTIX360.App.ViewModels;
 using EMOTIX360.App.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +23,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<DeviceStatusService>();
         builder.Services.AddSingleton<WifiProvisioningService>();
         builder.Services.AddSingleton<WifiNetworkInfoService>();
+
+        // Persistent multi-device registry.
+        // The JSON store is replaceable by SQLite later without changing callers.
+        builder.Services.AddSingleton<IDeviceRegistryStore, JsonDeviceRegistryStore>();
+        builder.Services.AddSingleton<DeviceRegistryService>();
 
         // Shared view-model state is retained while navigating between tabs.
         builder.Services.AddSingleton<HomeViewModel>();

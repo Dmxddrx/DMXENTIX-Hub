@@ -87,6 +87,9 @@ coverage/
 # Local settings
 launchSettings.local.json
 
+#Documnets
+DOCS/
+
 
 # ============================================================
 # Editors and IDEs

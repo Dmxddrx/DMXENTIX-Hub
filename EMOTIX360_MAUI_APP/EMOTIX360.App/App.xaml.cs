@@ -1,5 +1,6 @@
-
 using EMOTIX360.App.Services;
+using EMOTIX360.App.Services.Devices;
+using EMOTIX360.App.Models.Devices;
 
 namespace EMOTIX360.App;
 
@@ -7,10 +8,12 @@ public partial class App : Application
 {
     private readonly AppShell _appShell;
     private readonly BluetoothService _bluetoothService;
+    private readonly DeviceRegistryService _deviceRegistry;
 
     public App(
         AppShell appShell,
-        BluetoothService bluetoothService)
+        BluetoothService bluetoothService,
+        DeviceRegistryService deviceRegistry)
     {
         InitializeComponent();
 
@@ -19,14 +22,15 @@ public partial class App : Application
 
         _appShell = appShell;
         _bluetoothService = bluetoothService;
+        _deviceRegistry = deviceRegistry;
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
         var window = new Window(_appShell);
 
-        // Start automatic BLE connection after the native window
-        // has been created and the app is launching.
+        // Initialize persistent device records after the native window is created.
+        // This does not start a BLE scan or alter the existing connection logic.
         window.Created += OnWindowCreated;
 
         return window;
@@ -34,18 +38,35 @@ public partial class App : Application
 
     private async void OnWindowCreated(object? sender, EventArgs e)
     {
-        // Do not search for an EMOTIX360 device on the first launch.
-        // Automatic connection starts only after a device has been
-        // successfully connected and remembered previously.
+        // Load the multi-device registry and import the previous remembered
+        // EMOTIX360 identity before the existing auto-connect logic runs.
+        try
+        {
+            await _deviceRegistry.InitializeAsync();
+
+            IReadOnlyList<DeviceRecord> devices =
+                await _deviceRegistry.GetDevicesAsync();
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[DeviceRegistry] Startup loaded {devices.Count} saved device(s)."
+            );
+        }
+        catch (Exception ex)
+        {
+            // Registry failure must not prevent the existing EMOTIX360
+            // BLE connection workflow from starting.
+            System.Diagnostics.Debug.WriteLine(
+                $"[DeviceRegistry] Startup initialization failed: {ex.Message}"
+            );
+        }
+
+        // Keep the existing single-device auto-connect behaviour during Step 1.
         if (!_bluetoothService.HasRememberedDevice)
             return;
 
         try
         {
-            // Ensure Android Nearby Devices permissions are available
-            // before starting the automatic connection manager.
             await _bluetoothService.EnsurePermissionsAsync();
-
             _bluetoothService.StartAutoConnect();
         }
         catch (UnauthorizedAccessException ex)
