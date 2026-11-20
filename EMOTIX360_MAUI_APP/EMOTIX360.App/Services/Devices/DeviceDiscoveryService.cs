@@ -146,11 +146,5 @@ public sealed class DeviceDiscoveryService
             // One advertisement should resolve to one product profile.
             return;
         }
-        Debug.WriteLine(
-            $"[DeviceDiscovery] No registered profile matched | " +
-            $"Name='{device.Name}' | " +
-            $"ID={device.Id} | " +
-            $"RSSI={device.Rssi} dBm"
-        );
     }
 }

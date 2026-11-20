@@ -1167,8 +1167,10 @@ public sealed class BluetoothService
         ClearConnectionState();
 
         Debug.WriteLine(
-            "[BLE] Device disconnected unexpectedly."
-        );
+            _manualDisconnectRequested
+        ? "[BLE] Device disconnected by user."
+        : "[BLE] Device disconnected unexpectedly."
+            );
 
         ConnectionChanged?.Invoke(
             false,

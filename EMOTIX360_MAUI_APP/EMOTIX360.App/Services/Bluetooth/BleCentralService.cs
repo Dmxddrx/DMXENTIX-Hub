@@ -144,32 +144,6 @@ public sealed class BleCentralService
     object? sender,
     DeviceEventArgs args)
     {
-        IDevice device = args.Device;
-
-        Debug.WriteLine(
-            $"[BLE RAW] Device discovered | " +
-            $"Name='{device.Name}' | " +
-            $"ID={device.Id} | " +
-            $"RSSI={device.Rssi} dBm"
-        );
-
-        // Display advertisement records for diagnosis.
-        foreach (var record in device.AdvertisementRecords
-                     ?? Array.Empty<AdvertisementRecord>())
-        {
-            string data =
-                record.Data is { Length: > 0 }
-                    ? Convert.ToHexString(record.Data)
-                    : "<empty>";
-
-            Debug.WriteLine(
-                $"[BLE RAW] AD Record | " +
-                $"Type={record.Type} | " +
-                $"Data={data}"
-            );
-        }
-
-        // Forward the raw advertisement to the discovery services.
         DeviceDiscovered?.Invoke(this, args);
     }
 }

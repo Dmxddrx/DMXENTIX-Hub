@@ -87,7 +87,7 @@ public sealed class Emotix360DeviceProfile : IDeviceProfile
             for (int offset = 0; offset + 16 <= data.Length; offset += 16)
             {
                 Guid advertisedUuid =
-                    new Guid(data.AsSpan(offset, 16));
+                    new Guid(data.AsSpan(offset, 16), bigEndian: true);
 
                 if (advertisedUuid == ServiceUuid)
                 {
