@@ -10,6 +10,10 @@ using static Microsoft.Maui.ApplicationModel.Permissions;
 using ModelDeviceInfo = EMOTIX360.App.Models.DeviceInfo;
 using Microsoft.Maui.Storage;
 
+#if ANDROID
+using EMOTIX360.App.Platforms.Android;
+#endif
+
 namespace EMOTIX360.App.Services;
 
 /// <summary>
@@ -275,6 +279,11 @@ public sealed class BluetoothService
                 // We are now starting a new connection.
                 _manualDisconnectRequested = false;
             }
+#if ANDROID
+            // Start foreground service while the user-initiated
+            // connection operation is taking place.
+            BleForegroundServiceController.Start();
+#endif
 
             try
             {
@@ -304,6 +313,11 @@ public sealed class BluetoothService
             catch
             {
                 await DisconnectAfterFailedConnectAsync(device);
+#if ANDROID
+                // Do not leave the foreground service running
+                // when the manual connection attempt has failed.
+                BleForegroundServiceController.Stop();
+#endif
                 throw;
             }
         }
@@ -519,6 +533,27 @@ public sealed class BluetoothService
     // ========================================================
 
     public void StartAutoConnect()
+    {
+        if (IsConnected)
+            return;
+
+#if ANDROID
+        // Keep the Android process active during connection attempts
+        // and subsequent background reconnection.
+        BleForegroundServiceController.Start();
+#endif
+
+        StartAutoConnectCore();
+    }
+
+    // Called when Android recreates the sticky foreground service.
+    internal void ResumeAutoConnectFromForegroundService()
+    {
+        StartAutoConnectCore();
+    }
+
+    // Contains the actual automatic connection manager logic.
+    private void StartAutoConnectCore()
     {
         if (IsConnected)
             return;
@@ -875,8 +910,8 @@ public sealed class BluetoothService
         }
         finally
         {
-            if (device is not null &&
-                !IsConnected &&
+            if (!connectionInitialized &&
+                device is not null &&
                 _connectedDevice?.Id == device.Id)
             {
                 await DisconnectAfterFailedConnectAsync(device);
@@ -995,6 +1030,11 @@ public sealed class BluetoothService
         finally
         {
             _gattSemaphore.Release();
+#if ANDROID
+            // The user explicitly disconnected the ESP32.
+            // Remove the persistent foreground notification and stop the service.
+            BleForegroundServiceController.Stop();
+#endif
         }
     }
 
