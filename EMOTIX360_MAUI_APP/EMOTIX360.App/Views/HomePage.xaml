@@ -576,6 +576,8 @@
                     </Grid>
                     <Slider Minimum="0" Maximum="15"
                             Value="{Binding BrightnessValue, Mode=TwoWay}"
+                            DragStartedCommand="{Binding BrightnessDragStartedCommand}"
+                            DragCompletedCommand="{Binding BrightnessDragCompletedCommand}"
                             MinimumTrackColor="#5796FF"
                             MaximumTrackColor="#26364A"
                             ThumbColor="#F2F5FC" />

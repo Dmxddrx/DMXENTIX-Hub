@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using static Microsoft.Maui.ApplicationModel.Permissions;
 using ModelDeviceInfo = EMOTIX360.App.Models.DeviceInfo;
+using Microsoft.Maui.Storage;
 
 namespace EMOTIX360.App.Services;
 
@@ -36,6 +37,39 @@ public sealed class BluetoothService
     private readonly object _devicesLock = new();
     private readonly Dictionary<Guid, IDevice> _discoveredDevices = new();
     private readonly SemaphoreSlim _gattSemaphore = new(1, 1);
+
+    // --------------------------------------------------------
+    // AUTOMATIC BLE CONNECTION
+    // --------------------------------------------------------
+
+    private const string REMEMBERED_DEVICE_ID_KEY =
+        "emotix360_remembered_ble_device_id";
+
+    private const string REMEMBERED_DEVICE_NAME_KEY =
+        "emotix360_remembered_ble_device_name";
+
+    private const int AUTO_CONNECT_SCAN_DURATION_SECONDS = 8;
+
+    private static readonly TimeSpan AUTO_CONNECT_RETRY_DELAY =
+        TimeSpan.FromSeconds(5);
+
+    // Prevent manual and automatic connection operations
+    // from running simultaneously.
+    private readonly SemaphoreSlim _connectionOperationSemaphore =
+        new(1, 1);
+
+    // Prevent overlapping BLE scan operations.
+    private readonly SemaphoreSlim _scanSemaphore =
+        new(1, 1);
+
+    // Protect automatic connection task state.
+    private readonly object _autoConnectLock = new();
+
+    private CancellationTokenSource? _autoConnectCts;
+
+    // A manual disconnect must not trigger automatic reconnection.
+    private volatile bool _manualDisconnectRequested;
+    // --------------------------------------------------------
 
     private IDevice? _connectedDevice;
     private ICharacteristic? _commandCharacteristic;
@@ -76,6 +110,55 @@ public sealed class BluetoothService
     public event Action<string>? WifiProvisioningStatusPayloadReceived;
     public string? CurrentWifiProvisioningStatusPayload { get; private set; }
 
+    // Automatic connection progress for DeviceViewModel.
+    public event Action<string>? ConnectionProgressChanged;
+
+    // Previously connected device identity.
+    public Guid? RememberedDeviceId
+    {
+        get
+        {
+            string savedId = Preferences.Get(
+                REMEMBERED_DEVICE_ID_KEY,
+                string.Empty
+            );
+
+            return Guid.TryParse(savedId, out Guid deviceId)
+                ? deviceId
+                : null;
+        }
+    }
+
+    public string? RememberedDeviceName
+    {
+        get
+        {
+            string name = Preferences.Get(
+                REMEMBERED_DEVICE_NAME_KEY,
+                string.Empty
+            );
+
+            return string.IsNullOrWhiteSpace(name)
+                ? null
+                : name;
+        }
+    }
+
+    public bool HasRememberedDevice =>
+        RememberedDeviceId.HasValue;
+
+    public bool IsAutoConnecting
+    {
+        get
+        {
+            lock (_autoConnectLock)
+            {
+                return _autoConnectCts is not null;
+            }
+        }
+    }
+    // --------------------------------------------------------
+
     public bool IsBluetoothOn => _bluetoothLe.State == BluetoothState.On;
     public bool IsConnected => _connectedDevice is not null;
     public string? ConnectedDeviceName => _connectedDevice?.Name;
@@ -96,32 +179,57 @@ public sealed class BluetoothService
     /// Scans for the exact EMOTIX360 advertised name. The firmware also advertises
     /// the service UUID; GATT service validation is performed again after connection.
     /// </summary>
-    public async Task ScanAsync(TimeSpan? scanDuration = null, CancellationToken cancellationToken = default)
+    public async Task ScanAsync(
+    TimeSpan? scanDuration = null,
+    CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionsAsync();
-
-        if (!IsBluetoothOn)
-            throw new InvalidOperationException("Bluetooth is turned off. Enable Bluetooth and try again.");
-
-        if (_adapter.IsScanning)
-            await _adapter.StopScanningForDevicesAsync();
-
-        lock (_devicesLock)
-            _discoveredDevices.Clear();
-
-        _adapter.ScanTimeout = (int)(scanDuration ?? TimeSpan.FromSeconds(10)).TotalMilliseconds;
-
-        using CancellationTokenRegistration registration = cancellationToken.Register(
-            () => _ = StopScanSafelyAsync());
+        await _scanSemaphore.WaitAsync(cancellationToken);
 
         try
         {
-            await _adapter.StartScanningForDevicesAsync();
+            await EnsurePermissionsAsync();
+
+            if (!IsBluetoothOn)
+            {
+                throw new InvalidOperationException(
+                    "Bluetooth is turned off. Enable Bluetooth and try again."
+                );
+            }
+
+            if (_adapter.IsScanning)
+            {
+                await _adapter.StopScanningForDevicesAsync();
+            }
+
+            lock (_devicesLock)
+            {
+                _discoveredDevices.Clear();
+            }
+
+            _adapter.ScanTimeout =
+                (int)(scanDuration ??
+                    TimeSpan.FromSeconds(10)).TotalMilliseconds;
+
+            using CancellationTokenRegistration registration =
+                cancellationToken.Register(
+                    () => _ = StopScanSafelyAsync()
+                );
+
+            try
+            {
+                await _adapter.StartScanningForDevicesAsync();
+            }
+            finally
+            {
+                if (_adapter.IsScanning)
+                {
+                    await _adapter.StopScanningForDevicesAsync();
+                }
+            }
         }
         finally
         {
-            if (_adapter.IsScanning)
-                await _adapter.StopScanningForDevicesAsync();
+            _scanSemaphore.Release();
         }
     }
 
@@ -133,178 +241,680 @@ public sealed class BluetoothService
 
     public async Task ConnectAsync(Guid deviceId)
     {
-        IDevice device;
+        // Stop an automatic connection attempt before starting
+        // a user-requested connection.
+        StopAutoConnectLoop(false);
 
-        lock (_devicesLock)
-        {
-            if (!_discoveredDevices.TryGetValue(deviceId, out device!))
-                throw new InvalidOperationException("The selected device is no longer in the scan results. Scan again.");
-        }
+        _manualDisconnectRequested = false;
 
-        await EnsurePermissionsAsync();
-        await StopScanAsync();
-
-        if (_connectedDevice is not null)
-            await DisconnectAsync();
+        await _connectionOperationSemaphore.WaitAsync();
 
         try
         {
-            await _adapter.ConnectToDeviceAsync(device);
-            _connectedDevice = device;
+            IDevice device;
 
+            lock (_devicesLock)
+            {
+                if (!_discoveredDevices.TryGetValue(
+                        deviceId,
+                        out device!))
+                {
+                    throw new InvalidOperationException(
+                        "The selected device is no longer in the scan results. Scan again."
+                    );
+                }
+            }
 
-            // --------------------------------------------------------
-            // NEGOTIATE BLE MTU
-            // --------------------------------------------------------
+            await EnsurePermissionsAsync();
 
-            // ESP32-S3 is configured for MTU 100.
-            // Request the same MTU from the Android central device.
-            //
-            // MTU 100 provides up to 97 bytes of notification data.
+            await StopScanAsync();
+
+            // Disconnect a previously connected device if necessary.
+            if (_connectedDevice is not null)
+            {
+                await DisconnectAsync();
+
+                // DisconnectAsync marks this as a deliberate disconnect.
+                // We are now starting a new connection.
+                _manualDisconnectRequested = false;
+            }
+
+            try
+            {
+                using var connectCts =
+                    new CancellationTokenSource(
+                        TimeSpan.FromSeconds(15)
+                    );
+
+                await _adapter.ConnectToDeviceAsync(
+                    device,
+                    new ConnectParameters(autoConnect: false),
+                    connectCts.Token
+                );
+
+                _connectedDevice = device;
+
+                // Configure all GATT characteristics and notifications.
+                await InitializeConnectedDeviceAsync(device);
+
+                // Remember only a successfully initialized device.
+                SaveRememberedDevice(device);
+
+                Debug.WriteLine(
+                    $"[BLE] Remembered device: {device.Name}, ID: {device.Id}"
+                );
+            }
+            catch
+            {
+                await DisconnectAfterFailedConnectAsync(device);
+                throw;
+            }
+        }
+        finally
+        {
+            _connectionOperationSemaphore.Release();
+        }
+    }
+    // ========================================================
+    // INITIALIZE CONNECTED BLE DEVICE
+    // ========================================================
+
+    private async Task InitializeConnectedDeviceAsync(IDevice device)
+    {
+        _connectedDevice = device;
+
+        // --------------------------------------------------------
+        // NEGOTIATE BLE MTU
+        // --------------------------------------------------------
+
+        // ESP32-S3 is configured for MTU 100.
+        // Request the same MTU from Android.
 
 #if ANDROID
-            try
-            {
-                int negotiatedMtu = await device.RequestMtuAsync(100);
+        try
+        {
+            int negotiatedMtu = await device.RequestMtuAsync(100);
 
-                Debug.WriteLine(
-                    $"[BLE] ATT MTU negotiated: {negotiatedMtu}"
-                );
+            Debug.WriteLine(
+                $"[BLE] ATT MTU negotiated: {negotiatedMtu}"
+            );
 
-                Debug.WriteLine(
-                    $"[BLE] Maximum notification payload: " +
-                    $"{negotiatedMtu - 3} bytes"
-                );
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(
-                    $"[BLE] MTU negotiation failed: {ex.Message}"
-                );
+            Debug.WriteLine(
+                $"[BLE] Maximum notification payload: " +
+                $"{negotiatedMtu - 3} bytes"
+            );
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[BLE] MTU negotiation failed: {ex.Message}"
+            );
 
-                // Continue connecting, but subsequent notifications
-                // might remain limited to the default 20-byte payload.
-            }
+            // Continue using the negotiated/default MTU.
+        }
 #endif
 
+        // --------------------------------------------------------
+        // DISCOVER GATT SERVICE
+        // --------------------------------------------------------
 
-            // --------------------------------------------------------
-            // DISCOVER GATT SERVICE
-            // --------------------------------------------------------
+        IService? service =
+            await device.GetServiceAsync(ServiceUuid);
 
-            IService? service =
-                await device.GetServiceAsync(ServiceUuid);
-
-            if (service is null)
-                throw new InvalidOperationException("EMOTIX360 BLE service was not found on the connected device.");
-
-            _commandCharacteristic = await service.GetCharacteristicAsync(CommandCharacteristicUuid);
-            _statusCharacteristic = await service.GetCharacteristicAsync(StatusCharacteristicUuid);
-
-            if (_commandCharacteristic is null)
-                throw new InvalidOperationException("The EMOTIX360 command characteristic was not found.");
-
-            if (_statusCharacteristic is null)
-                throw new InvalidOperationException("The EMOTIX360 status characteristic was not found.");
-
-            // --------------------------------------------------------
-            // WIFI PROVISIONING CHARACTERISTIC
-            // --------------------------------------------------------
-
-            _wifiProvisioningCharacteristic =
-                await service.GetCharacteristicAsync(
-                    WifiProvisioningCharacteristicUuid
-                );
-
-            if (_wifiProvisioningCharacteristic is null)
-            {
-                throw new InvalidOperationException(
-                    "The EMOTIX360 Wi-Fi provisioning characteristic was not found."
-                );
-            }
-
-            _statusUpdatedHandler = OnStatusCharacteristicUpdated;
-            _statusCharacteristic.ValueUpdated += _statusUpdatedHandler;
-            await _statusCharacteristic.StartUpdatesAsync();
-
-            // Read the current value once as well as subscribing to future notifications.
-            // The firmware may still return "booting" until its status publisher is added.
-            try
-            {
-                var readResult = await _statusCharacteristic.ReadAsync();
-
-                if (readResult.resultCode == 0)
-                {
-                    PublishStatus(readResult.data);
-                }
-                else
-                {
-                    Debug.WriteLine(
-                        $"[BLE] Initial status read failed. " +
-                        $"GATT result: {readResult.resultCode}"
-                    );
-                }
-            }
-            catch (Exception ex)
-            {
-                // Keep the GATT connection alive if the initial read fails.
-                // Notifications may still deliver the next valid status packet.
-
-                Debug.WriteLine(
-                    $"[BLE] Initial status read exception: {ex.Message}"
-                );
-            }
-
-            // --------------------------------------------------------
-            // WIFI PROVISIONING STATUS NOTIFICATIONS
-            // --------------------------------------------------------
-
-            _wifiProvisioningUpdatedHandler =
-                OnWifiProvisioningCharacteristicUpdated;
-
-            _wifiProvisioningCharacteristic.ValueUpdated +=
-                _wifiProvisioningUpdatedHandler;
-
-            await _wifiProvisioningCharacteristic.StartUpdatesAsync();
-
-            // Read the current provisioning status and network count.
-            try
-            {
-                var readResult =
-                    await _wifiProvisioningCharacteristic.ReadAsync();
-
-                if (readResult.resultCode == 0)
-                {
-                    PublishWifiProvisioningStatus(readResult.data);
-                }
-                else
-                {
-                    Debug.WriteLine(
-                        "[BLE] Initial Wi-Fi provisioning status read failed. " +
-                        $"GATT result: {readResult.resultCode}"
-                    );
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(
-                    $"[BLE] Wi-Fi provisioning status read exception: {ex.Message}"
-                );
-            }
-
-            ConnectionChanged?.Invoke(true, device.Name);
-            // Start monitoring incoming ESP32 status notifications.
-            StartHeartbeatMonitor();
-        }
-        catch
+        if (service is null)
         {
-            await DisconnectAfterFailedConnectAsync(device);
-            throw;
+            throw new InvalidOperationException(
+                "EMOTIX360 BLE service was not found."
+            );
+        }
+
+        _commandCharacteristic =
+            await service.GetCharacteristicAsync(
+                CommandCharacteristicUuid
+            );
+
+        _statusCharacteristic =
+            await service.GetCharacteristicAsync(
+                StatusCharacteristicUuid
+            );
+
+        if (_commandCharacteristic is null)
+        {
+            throw new InvalidOperationException(
+                "The EMOTIX360 command characteristic was not found."
+            );
+        }
+
+        if (_statusCharacteristic is null)
+        {
+            throw new InvalidOperationException(
+                "The EMOTIX360 status characteristic was not found."
+            );
+        }
+
+        // --------------------------------------------------------
+        // WIFI PROVISIONING CHARACTERISTIC
+        // --------------------------------------------------------
+
+        _wifiProvisioningCharacteristic =
+            await service.GetCharacteristicAsync(
+                WifiProvisioningCharacteristicUuid
+            );
+
+        if (_wifiProvisioningCharacteristic is null)
+        {
+            throw new InvalidOperationException(
+                "The EMOTIX360 Wi-Fi provisioning characteristic was not found."
+            );
+        }
+
+        // --------------------------------------------------------
+        // NORMAL DEVICE STATUS NOTIFICATIONS
+        // --------------------------------------------------------
+
+        _statusUpdatedHandler =
+            OnStatusCharacteristicUpdated;
+
+        _statusCharacteristic.ValueUpdated +=
+            _statusUpdatedHandler;
+
+        await _statusCharacteristic.StartUpdatesAsync();
+
+        // Read the current device status.
+        try
+        {
+            var readResult =
+                await _statusCharacteristic.ReadAsync();
+
+            if (readResult.resultCode == 0)
+            {
+                PublishStatus(readResult.data);
+            }
+            else
+            {
+                Debug.WriteLine(
+                    $"[BLE] Initial status read failed. " +
+                    $"GATT result: {readResult.resultCode}"
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[BLE] Initial status read exception: {ex.Message}"
+            );
+        }
+
+        // --------------------------------------------------------
+        // WIFI PROVISIONING STATUS NOTIFICATIONS
+        // --------------------------------------------------------
+
+        _wifiProvisioningUpdatedHandler =
+            OnWifiProvisioningCharacteristicUpdated;
+
+        _wifiProvisioningCharacteristic.ValueUpdated +=
+            _wifiProvisioningUpdatedHandler;
+
+        await _wifiProvisioningCharacteristic.StartUpdatesAsync();
+
+        // Read the current provisioning status.
+        try
+        {
+            var readResult =
+                await _wifiProvisioningCharacteristic.ReadAsync();
+
+            if (readResult.resultCode == 0)
+            {
+                PublishWifiProvisioningStatus(readResult.data);
+            }
+            else
+            {
+                Debug.WriteLine(
+                    "[BLE] Initial Wi-Fi provisioning status read failed. " +
+                    $"GATT result: {readResult.resultCode}"
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[BLE] Wi-Fi provisioning status read exception: {ex.Message}"
+            );
+        }
+
+        // --------------------------------------------------------
+        // CONNECTION COMPLETED
+        // --------------------------------------------------------
+
+        Debug.WriteLine(
+            $"[BLE] Connected and GATT initialized: {device.Name}"
+        );
+
+        ConnectionChanged?.Invoke(
+            true,
+            device.Name
+        );
+
+        StartHeartbeatMonitor();
+    }
+
+    // ========================================================
+    // SAVE REMEMBERED DEVICE IDENTITY
+    // ========================================================
+
+    private void SaveRememberedDevice(IDevice device)
+    {
+        Preferences.Set(
+            REMEMBERED_DEVICE_ID_KEY,
+            device.Id.ToString("D")
+        );
+
+        Preferences.Set(
+            REMEMBERED_DEVICE_NAME_KEY,
+            string.IsNullOrWhiteSpace(device.Name)
+                ? DeviceName
+                : device.Name
+        );
+    }
+
+    // ========================================================
+    // START AUTOMATIC CONNECTION
+    // ========================================================
+
+    public void StartAutoConnect()
+    {
+        if (IsConnected)
+            return;
+
+        lock (_autoConnectLock)
+        {
+            if (_autoConnectCts is not null)
+                return;
+
+            _manualDisconnectRequested = false;
+
+            var source = new CancellationTokenSource();
+
+            _autoConnectCts = source;
+
+            Debug.WriteLine(
+                "[BLE] Automatic connection manager started."
+            );
+
+            ConnectionProgressChanged?.Invoke(
+                "Searching for EMOTIX360..."
+            );
+
+            _ = RunAutoConnectLoopAsync(source);
+        }
+    }
+
+    // ========================================================
+    // AUTOMATIC CONNECTION RETRY LOOP
+    // ========================================================
+
+    private async Task RunAutoConnectLoopAsync(
+        CancellationTokenSource source)
+    {
+        CancellationToken cancellationToken =
+            source.Token;
+
+        int retryAttempt = 0;
+
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested &&
+                   !_manualDisconnectRequested &&
+                   !IsConnected)
+            {
+                try
+                {
+                    if (!IsBluetoothOn)
+                    {
+                        ConnectionProgressChanged?.Invoke(
+                            "Bluetooth is turned off. Enable Bluetooth."
+                        );
+                    }
+                    else
+                    {
+                        bool connected = false;
+
+                        Guid? rememberedId = RememberedDeviceId;
+
+                        // ------------------------------------------------
+                        // TRY REMEMBERED DEVICE FIRST
+                        // ------------------------------------------------
+
+                        if (rememberedId.HasValue)
+                        {
+                            ConnectionProgressChanged?.Invoke(
+                                $"Connecting to {RememberedDeviceName ?? DeviceName}..."
+                            );
+
+                            connected =
+                                await TryConnectToRememberedDeviceAsync(
+                                    rememberedId.Value,
+                                    cancellationToken
+                                );
+                        }
+
+                        // ------------------------------------------------
+                        // FALLBACK TO DEVICE DISCOVERY
+                        // ------------------------------------------------
+
+                        if (!connected &&
+                            !cancellationToken.IsCancellationRequested &&
+                            !IsConnected)
+                        {
+                            ConnectionProgressChanged?.Invoke(
+                                "Searching for EMOTIX360..."
+                            );
+
+                            connected =
+                                await TryScanAndConnectAsync(
+                                    cancellationToken
+                                );
+                        }
+
+                        if (connected || IsConnected)
+                            break;
+                    }
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        $"[BLE] Automatic connection attempt failed: {ex.Message}"
+                    );
+                }
+
+                if (cancellationToken.IsCancellationRequested ||
+                    _manualDisconnectRequested ||
+                    IsConnected)
+                {
+                    break;
+                }
+
+                retryAttempt++;
+
+                int delaySeconds =
+                    Math.Min(15, retryAttempt * 5);
+
+                ConnectionProgressChanged?.Invoke(
+                    $"EMOTIX360 not found. Retrying in {delaySeconds} seconds..."
+                );
+
+                await Task.Delay(
+                    TimeSpan.FromSeconds(delaySeconds),
+                    cancellationToken
+                );
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when automatic connection is stopped.
+        }
+        finally
+        {
+            lock (_autoConnectLock)
+            {
+                if (ReferenceEquals(_autoConnectCts, source))
+                {
+                    _autoConnectCts = null;
+                }
+            }
+
+            source.Dispose();
+
+            Debug.WriteLine(
+                "[BLE] Automatic connection manager stopped."
+            );
+        }
+    }
+
+    // ========================================================
+    // CONNECT TO REMEMBERED DEVICE
+    // ========================================================
+
+    private async Task<bool> TryConnectToRememberedDeviceAsync(
+        Guid deviceId,
+        CancellationToken cancellationToken)
+    {
+        await _connectionOperationSemaphore.WaitAsync(
+            cancellationToken
+        );
+
+        IDevice? device = null;
+
+        try
+        {
+            if (IsConnected)
+                return true;
+
+            await EnsurePermissionsAsync();
+
+            await StopScanAsync();
+
+            using var attemptCts =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken
+                );
+
+            // Bound the attempt so the retry loop can continue.
+            attemptCts.CancelAfter(
+                TimeSpan.FromSeconds(12)
+            );
+
+            Debug.WriteLine(
+                $"[BLE] Reconnecting using remembered ID: {deviceId}"
+            );
+
+            device = await _adapter.ConnectToKnownDeviceAsync(
+                deviceId,
+                new ConnectParameters(autoConnect: false),
+                attemptCts.Token
+            );
+
+            _connectedDevice = device;
+
+            await InitializeConnectedDeviceAsync(device);
+
+            SaveRememberedDevice(device);
+
+            Debug.WriteLine(
+                "[BLE] Remembered device reconnected successfully."
+            );
+
+            return true;
+        }
+        catch (OperationCanceledException)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            Debug.WriteLine(
+                "[BLE] Remembered-device connection timed out."
+            );
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[BLE] Remembered-device connection failed: {ex.Message}"
+            );
+
+            return false;
+        }
+        finally
+        {
+            if (device is not null &&
+                !IsConnected &&
+                _connectedDevice?.Id == device.Id)
+            {
+                await DisconnectAfterFailedConnectAsync(device);
+            }
+
+            _connectionOperationSemaphore.Release();
+        }
+    }
+
+    // ========================================================
+    // SCAN AND CONNECT TO EMOTIX360
+    // ========================================================
+
+    private async Task<bool> TryScanAndConnectAsync(
+        CancellationToken cancellationToken)
+    {
+        await _connectionOperationSemaphore.WaitAsync(
+            cancellationToken
+        );
+
+        IDevice? device = null;
+
+        try
+        {
+            if (IsConnected)
+                return true;
+
+            Debug.WriteLine(
+                "[BLE] Starting automatic EMOTIX360 scan."
+            );
+
+            await ScanAsync(
+                TimeSpan.FromSeconds(
+                    AUTO_CONNECT_SCAN_DURATION_SECONDS
+                ),
+                cancellationToken
+            );
+
+            // Find the strongest matching EMOTIX360 advertisement.
+            lock (_devicesLock)
+            {
+                device = _discoveredDevices.Values
+                    .Where(d => string.Equals(
+                        d.Name,
+                        DeviceName,
+                        StringComparison.OrdinalIgnoreCase
+                    ))
+                    .OrderByDescending(d => d.Rssi)
+                    .FirstOrDefault();
+            }
+
+            if (device is null)
+            {
+                Debug.WriteLine(
+                    "[BLE] EMOTIX360 was not found during automatic scan."
+                );
+
+                return false;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            Debug.WriteLine(
+                $"[BLE] Automatically discovered: {device.Name}"
+            );
+
+            using var attemptCts =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken
+                );
+
+            attemptCts.CancelAfter(
+                TimeSpan.FromSeconds(15)
+            );
+
+            await _adapter.ConnectToDeviceAsync(
+                device,
+                new ConnectParameters(autoConnect: false),
+                attemptCts.Token
+            );
+
+            _connectedDevice = device;
+
+            await InitializeConnectedDeviceAsync(device);
+
+            // Update remembered ID if the discovered device has
+            // a different identity from the previously saved one.
+            SaveRememberedDevice(device);
+
+            Debug.WriteLine(
+                "[BLE] Automatic connection completed successfully."
+            );
+
+            return true;
+        }
+        catch (OperationCanceledException)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            Debug.WriteLine(
+                "[BLE] Automatic scan connection attempt timed out."
+            );
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[BLE] Automatic scan connection failed: {ex.Message}"
+            );
+
+            return false;
+        }
+        finally
+        {
+            if (device is not null &&
+                !IsConnected &&
+                _connectedDevice?.Id == device.Id)
+            {
+                await DisconnectAfterFailedConnectAsync(device);
+            }
+
+            _connectionOperationSemaphore.Release();
+        }
+    }
+
+    // ========================================================
+    // STOP AUTOMATIC CONNECTION LOOP
+    // ========================================================
+
+    private void StopAutoConnectLoop(bool manualDisconnect)
+    {
+        if (manualDisconnect)
+        {
+            _manualDisconnectRequested = true;
+        }
+
+        CancellationTokenSource? source;
+
+        lock (_autoConnectLock)
+        {
+            source = _autoConnectCts;
+
+            _autoConnectCts = null;
+        }
+
+        if (source is not null)
+        {
+            try
+            {
+                source.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The connection task has already completed.
+            }
         }
     }
 
     public async Task DisconnectAsync()
     {
+        // A user-requested disconnect must suppress automatic reconnection.
+        StopAutoConnectLoop(manualDisconnect: true);
+
         // Serialize disconnect with writes; Android GATT operations should not overlap.
         await _gattSemaphore.WaitAsync();
         try
@@ -517,8 +1127,11 @@ public sealed class BluetoothService
         if (_connectedDevice?.Id != args.Device.Id)
             return;
 
-        // Remove the status notification handler from the
-        // disconnected characteristic.
+        bool shouldReconnect =
+            !_manualDisconnectRequested &&
+            RememberedDeviceId.HasValue;
+
+        // Remove the normal status handler.
         if (_statusCharacteristic is not null &&
             _statusUpdatedHandler is not null)
         {
@@ -526,6 +1139,7 @@ public sealed class BluetoothService
                 _statusUpdatedHandler;
         }
 
+        // Remove the Wi-Fi provisioning handler.
         if (_wifiProvisioningCharacteristic is not null &&
             _wifiProvisioningUpdatedHandler is not null)
         {
@@ -535,10 +1149,24 @@ public sealed class BluetoothService
 
         ClearConnectionState();
 
+        Debug.WriteLine(
+            "[BLE] Device disconnected unexpectedly."
+        );
+
         ConnectionChanged?.Invoke(
             false,
             "The device disconnected."
         );
+
+        // Retry only if the user did not explicitly disconnect.
+        if (shouldReconnect)
+        {
+            Debug.WriteLine(
+                "[BLE] Starting automatic reconnection."
+            );
+
+            StartAutoConnect();
+        }
     }
 
     private void OnStatusCharacteristicUpdated(object? sender, CharacteristicUpdatedEventArgs args)
@@ -853,6 +1481,14 @@ public sealed class BluetoothService
                 Debug.WriteLine(
                     $"[BLE] Disconnection cleanup: {ex.Message}"
                 );
+            }
+
+            // The heartbeat watchdog detected an unexpected loss.
+            // Restore the connection automatically.
+            if (!_manualDisconnectRequested &&
+                RememberedDeviceId.HasValue)
+            {
+                StartAutoConnect();
             }
         }
     }

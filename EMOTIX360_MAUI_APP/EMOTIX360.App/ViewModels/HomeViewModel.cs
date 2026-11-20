@@ -23,6 +23,34 @@ public sealed class HomeViewModel : ObservableObject
     private string _timeText = "--";
 
     // --------------------------------------------------------
+    // BRIGHTNESS PREVIEW STATE
+    // --------------------------------------------------------
+
+    // Latest confirmed brightness reported by the ESP32.
+    private double? _deviceBrightnessValue;
+
+    // Prevent device status updates from overwriting
+    // the slider while the user is adjusting it.
+    private bool _isBrightnessDragging;
+
+    // Indicates that the slider is temporarily showing
+    // a user-selected brightness.
+    private bool _isBrightnessPreviewActive;
+
+    // Brightness value awaiting device confirmation.
+    private int? _pendingBrightnessValue;
+
+    // Cancels the five-second preview timeout when
+    // the user starts another adjustment.
+    private CancellationTokenSource? _brightnessPreviewTimeoutCts;
+
+    private const int BRIGHTNESS_PREVIEW_TIMEOUT_MS = 5000;
+
+    private const int BRIGHTNESS_RETURN_STEPS = 15;
+
+    private const int BRIGHTNESS_RETURN_INTERVAL_MS = 30;
+
+    // --------------------------------------------------------
     // ANIMATION HIGHLIGHT STATE
     // --------------------------------------------------------
 
@@ -82,6 +110,15 @@ public sealed class HomeViewModel : ObservableObject
             async () => await ApplyBrightnessAsync(),
             () => IsConnected);
 
+        // Brightness slider interaction commands.
+        BrightnessDragStartedCommand = new Command(
+            OnBrightnessDragStarted
+        );
+
+        BrightnessDragCompletedCommand = new Command(
+            OnBrightnessDragCompleted
+        );
+
         _bluetooth.ConnectionChanged += OnConnectionChanged;
         _statusService.StatusUpdated += OnStatusUpdated;
         _statusService.StatusCleared += OnStatusCleared;
@@ -94,6 +131,8 @@ public sealed class HomeViewModel : ObservableObject
     public ICommand OpenDeviceCommand { get; }
     public Command<string> SelectAnimationCommand { get; }
     public Command ApplyBrightnessCommand { get; }
+    public Command BrightnessDragStartedCommand { get; }
+    public Command BrightnessDragCompletedCommand { get; }
 
     public bool IsConnected
     {
@@ -306,23 +345,204 @@ public sealed class HomeViewModel : ObservableObject
         NotifyModeSelectionChanged();
     }
 
+    // ========================================================
+    // BRIGHTNESS SLIDER INTERACTION
+    // ========================================================
+
+    // --------------------------------------------------------
+    // USER STARTED MOVING THE SLIDER
+    // --------------------------------------------------------
+
+    private void OnBrightnessDragStarted()
+    {
+        // Cancel any previous return animation or timeout.
+        CancelBrightnessPreviewTimeout();
+
+        _isBrightnessDragging = true;
+        _isBrightnessPreviewActive = true;
+
+        _pendingBrightnessValue = null;
+    }
+
+
+    // --------------------------------------------------------
+    // USER RELEASED THE SLIDER
+    // --------------------------------------------------------
+
+    private void OnBrightnessDragCompleted()
+    {
+        _isBrightnessDragging = false;
+
+        // Give the user five seconds to press Apply.
+        RestartBrightnessPreviewTimeout();
+    }
+
+
+    // --------------------------------------------------------
+    // CANCEL PREVIOUS PREVIEW TIMEOUT
+    // --------------------------------------------------------
+
+    private void CancelBrightnessPreviewTimeout()
+    {
+        CancellationTokenSource? previous =
+            _brightnessPreviewTimeoutCts;
+
+        _brightnessPreviewTimeoutCts = null;
+
+        if (previous is not null)
+        {
+            previous.Cancel();
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // START FIVE-SECOND PREVIEW TIMEOUT
+    // --------------------------------------------------------
+
+    private void RestartBrightnessPreviewTimeout()
+    {
+        CancelBrightnessPreviewTimeout();
+
+        var source = new CancellationTokenSource();
+
+        _brightnessPreviewTimeoutCts = source;
+
+        _ = ReturnBrightnessAfterTimeoutAsync(source);
+    }
+
+
+    // --------------------------------------------------------
+    // WAIT FOR USER TO APPLY BRIGHTNESS
+    // --------------------------------------------------------
+
+    private async Task ReturnBrightnessAfterTimeoutAsync(
+        CancellationTokenSource source)
+    {
+        try
+        {
+            await Task.Delay(
+                BRIGHTNESS_PREVIEW_TIMEOUT_MS,
+                source.Token
+            );
+
+            if (!source.IsCancellationRequested)
+            {
+                await AnimateBrightnessBackToDeviceAsync(
+                    source.Token
+                );
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when the user starts another adjustment
+            // or the device confirms the selected brightness.
+        }
+        finally
+        {
+            if (ReferenceEquals(
+                    _brightnessPreviewTimeoutCts,
+                    source))
+            {
+                _brightnessPreviewTimeoutCts = null;
+            }
+
+            source.Dispose();
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // SMOOTHLY RETURN TO DEVICE BRIGHTNESS
+    // --------------------------------------------------------
+
+    private async Task AnimateBrightnessBackToDeviceAsync(
+        CancellationToken cancellationToken)
+    {
+        double startValue = BrightnessValue;
+
+        double targetValue =
+            _deviceBrightnessValue ?? startValue;
+
+        for (int step = 1;
+             step <= BRIGHTNESS_RETURN_STEPS;
+             step++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            double progress =
+                step / (double)BRIGHTNESS_RETURN_STEPS;
+
+            double interpolatedValue =
+                startValue +
+                ((targetValue - startValue) * progress);
+
+            await MainThread.InvokeOnMainThreadAsync(
+                () =>
+                {
+                    BrightnessValue = interpolatedValue;
+                }
+            );
+
+            await Task.Delay(
+                BRIGHTNESS_RETURN_INTERVAL_MS,
+                cancellationToken
+            );
+        }
+
+        // Use the latest confirmed device value.
+        await MainThread.InvokeOnMainThreadAsync(
+            () =>
+            {
+                if (_deviceBrightnessValue.HasValue)
+                {
+                    BrightnessValue =
+                        _deviceBrightnessValue.Value;
+                }
+
+                _pendingBrightnessValue = null;
+
+                _isBrightnessPreviewActive = false;
+            }
+        );
+    }
+
     private async Task ApplyBrightnessAsync()
     {
         if (!IsConnected)
         {
-            DashboardMessage = "Connect to EMOTIX360 before changing brightness.";
+            DashboardMessage =
+                "Connect to EMOTIX360 before changing brightness.";
+
             return;
         }
 
         int value = (int)Math.Round(BrightnessValue);
+
+        // Keep the selected value visible while waiting
+        // for confirmation from the ESP32.
+        _isBrightnessPreviewActive = true;
+
+        _isBrightnessDragging = false;
+
+        _pendingBrightnessValue = value;
+
+        // Give the device time to apply and report the value.
+        RestartBrightnessPreviewTimeout();
+
         try
         {
             await _commands.SetBrightnessAsync(value);
-            DashboardMessage = $"Sent brightness {value}. Waiting for device status.";
+
+            DashboardMessage =
+                $"Sent brightness {value}. Waiting for device confirmation.";
         }
         catch (Exception ex)
         {
-            DashboardMessage = $"Could not send brightness command: {ex.Message}";
+            _pendingBrightnessValue = null;
+
+            DashboardMessage =
+                $"Could not send brightness command: {ex.Message}";
         }
     }
 
@@ -337,7 +557,18 @@ public sealed class HomeViewModel : ObservableObject
 
             if (!connected)
             {
+                // Stop any active brightness preview.
+                CancelBrightnessPreviewTimeout();
 
+                _isBrightnessDragging = false;
+                _isBrightnessPreviewActive = false;
+                _pendingBrightnessValue = null;
+
+                _deviceBrightnessValue = null;
+
+                BrightnessValue = 5;
+
+                // Other initials
                 ClearModeSelectionState();
 
                 ActiveModeText = "--";
@@ -358,7 +589,18 @@ public sealed class HomeViewModel : ObservableObject
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
+            // Stop any active brightness preview.
+            CancelBrightnessPreviewTimeout();
 
+            _isBrightnessDragging = false;
+            _isBrightnessPreviewActive = false;
+            _pendingBrightnessValue = null;
+
+            _deviceBrightnessValue = null;
+
+            BrightnessValue = 5;
+
+            // Other initials
             ClearModeSelectionState();
 
             ActiveModeText = "--";
@@ -402,8 +644,38 @@ public sealed class HomeViewModel : ObservableObject
 
         if (status.Brightness.HasValue)
         {
-            BrightnessText = status.Brightness.Value.ToString();
-            BrightnessValue = status.Brightness.Value;
+            double reportedBrightness =
+                status.Brightness.Value;
+
+            // Always update the actual device brightness display.
+            BrightnessText =
+                reportedBrightness.ToString();
+
+            // Preserve the latest confirmed device value.
+            _deviceBrightnessValue = reportedBrightness;
+
+            // Check whether the ESP32 confirmed our requested value.
+            if (_pendingBrightnessValue.HasValue &&
+                (int)Math.Round(reportedBrightness) ==
+                    _pendingBrightnessValue.Value)
+            {
+                _pendingBrightnessValue = null;
+
+                _isBrightnessPreviewActive = false;
+
+                // Cancel the preview timeout.
+                CancelBrightnessPreviewTimeout();
+
+                // Keep the slider at the confirmed value.
+                BrightnessValue = reportedBrightness;
+            }
+            else if (!_isBrightnessDragging &&
+                     !_isBrightnessPreviewActive)
+            {
+                // Normal status synchronization when no user
+                // adjustment is currently in progress.
+                BrightnessValue = reportedBrightness;
+            }
         }
 
         // --------------------------------------------------------
