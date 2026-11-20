@@ -339,7 +339,7 @@ namespace EMOTIX360.App.ViewModels
             if (shell is null)
                 return;
 
-            bool confirmed = await shell.DisplayAlert(
+            bool confirmed = await shell.DisplayAlertAsync(
                 "Clear saved Wi-Fi networks?",
                 $"This will remove all {StoredNetworkCount} app-sent " +
                 "Wi-Fi networks saved on EMOTIX360.\n\n" +

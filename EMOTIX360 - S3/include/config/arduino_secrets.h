@@ -2,6 +2,6 @@
 #define ARDUINO_SECRETS_H
 
 #define WIFI_SSID "ENTGRA 2.5G"
-#define WIFI_PASSWORD "Entgra@110"
+#define WIFI_PASSWORD "Entgra@10"
 
 #endif
