@@ -88,6 +88,12 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
     public bool IsEmotix360Workspace =>
         _record?.DeviceType == AppDeviceType.Emotix360;
 
+    public bool IsDashboardVisible =>
+    IsEmotix360Workspace && IsConnected;
+
+    public bool IsWorkspaceMessageVisible =>
+        !IsDashboardVisible;
+
     // ========================================================
     // LOADING STATE
     // ========================================================
@@ -115,6 +121,8 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(ConnectionStatusText));
                 OnPropertyChanged(nameof(WorkspaceMessage));
+                OnPropertyChanged(nameof(IsDashboardVisible));
+                OnPropertyChanged(nameof(IsWorkspaceMessageVisible));
             }
         }
     }
@@ -385,5 +393,7 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
         OnPropertyChanged(nameof(LastConnectedText));
         OnPropertyChanged(nameof(IsEmotix360Workspace));
         OnPropertyChanged(nameof(WorkspaceMessage));
+        OnPropertyChanged(nameof(IsDashboardVisible));
+        OnPropertyChanged(nameof(IsWorkspaceMessageVisible));
     }
 }

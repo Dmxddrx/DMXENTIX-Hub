@@ -36,6 +36,9 @@
     <MauiXaml Update="Views\DeviceWorkspacePage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </MauiXaml>
+    <MauiXaml Update="Views\Emotix360DashboardView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </MauiXaml>
     <MauiXaml Update="Views\HomePage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </MauiXaml>
@@ -56,6 +59,9 @@
   <ItemGroup>
     <Compile Update="Views\DeviceHubPage.xaml.cs">
       <DependentUpon>DeviceHubPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Views\Emotix360DashboardView.xaml.cs">
+      <DependentUpon>Emotix360DashboardView.xaml</DependentUpon>
     </Compile>
   </ItemGroup>
 

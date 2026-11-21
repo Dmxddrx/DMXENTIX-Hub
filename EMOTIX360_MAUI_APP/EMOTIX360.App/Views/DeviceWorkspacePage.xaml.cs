@@ -9,12 +9,21 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
 
     private string? _deviceId;
 
-    public DeviceWorkspacePage(DeviceWorkspaceViewModel viewModel)
+    public DeviceWorkspacePage(
+        DeviceWorkspaceViewModel viewModel,
+        HomeViewModel homeViewModel)
     {
         InitializeComponent();
 
         _viewModel = viewModel;
         BindingContext = _viewModel;
+
+        // The workspace dashboard uses the existing
+        // session-aware EMOTIX360 dashboard ViewModel.
+        Emotix360Dashboard.BindingContext = homeViewModel;
+
+        // The workspace already displays its own connection information.
+        Emotix360Dashboard.ShowDeviceConnectionCard = false;
     }
 
     // ========================================================
