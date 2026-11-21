@@ -121,12 +121,14 @@ public sealed class HomeViewModel : ObservableObject
         );
 
         _bluetooth.ConnectionChanged += OnConnectionChanged;
+        _bluetooth.ActiveSessionChanged += OnActiveSessionChanged;
+
         _statusService.StatusUpdated += OnStatusUpdated;
         _statusService.StatusCleared += OnStatusCleared;
 
         IsConnected = _bluetooth.IsConnected;
-        if (_statusService.Current is not null)
-            ApplyStatus(_statusService.Current);
+
+        _statusService.SetSession(_bluetooth.ActiveSession);
     }
 
     public ICommand OpenDeviceCommand { get; }
@@ -551,6 +553,10 @@ public sealed class HomeViewModel : ObservableObject
         }
     }
 
+    private void OnActiveSessionChanged(IDeviceSession? session)
+    {
+        _statusService.SetSession(session);
+    }
     private void OnConnectionChanged(bool connected, string? detail)
     {
         MainThread.BeginInvokeOnMainThread(() =>
