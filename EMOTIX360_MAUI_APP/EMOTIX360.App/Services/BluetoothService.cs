@@ -45,6 +45,9 @@ public sealed class BluetoothService
     private readonly Dictionary<Guid, IDevice> _discoveredDevices = new();
     private readonly SemaphoreSlim _gattSemaphore = new(1, 1);
 
+    // Allows Bluetooth state changes to interrupt the automatic retry delay.
+    private readonly SemaphoreSlim _autoConnectWakeSignal = new(0, 1);
+
     // --------------------------------------------------------
     // AUTOMATIC BLE CONNECTION
     // --------------------------------------------------------
@@ -95,6 +98,8 @@ public sealed class BluetoothService
 
     private long _lastStatusReceivedUtcTicks;
 
+    public event Action<bool>? BluetoothPowerStateChanged;
+
     public BluetoothService(BleCentralService bleCentral)
     {
         _bleCentral = bleCentral;
@@ -108,12 +113,55 @@ public sealed class BluetoothService
 
         // Clear the connection lookup cache before every scan.
         _bleCentral.ScanStarting += ClearDiscoveredDevices;
+
+        _bleCentral.BluetoothPowerStateChanged +=
+            OnCentralBluetoothPowerStateChanged;
     }
     private void ClearDiscoveredDevices()
     {
         lock (_devicesLock)
         {
             _discoveredDevices.Clear();
+        }
+    }
+
+    // ========================================================
+    // INTERRUPTIBLE AUTOMATIC RETRY DELAY
+    // ========================================================
+
+    private async Task WaitForAutoConnectRetryAsync(
+        int delaySeconds,
+        CancellationToken cancellationToken)
+    {
+        using var waitCts =
+            CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken
+            );
+
+        Task delayTask = Task.Delay(
+            TimeSpan.FromSeconds(delaySeconds),
+            waitCts.Token
+        );
+
+        Task wakeTask = _autoConnectWakeSignal.WaitAsync(
+            waitCts.Token
+        );
+
+        Task completedTask = await Task.WhenAny(
+            delayTask,
+            wakeTask
+        );
+
+        // Cancel the task that did not win.
+        waitCts.Cancel();
+
+        await completedTask;
+
+        if (completedTask == wakeTask)
+        {
+            Debug.WriteLine(
+                "[BLE] Automatic retry resumed after Bluetooth state change."
+            );
         }
     }
 
@@ -176,6 +224,52 @@ public sealed class BluetoothService
     public bool IsConnected => _connectedDevice is not null;
     public string? ConnectedDeviceName => _connectedDevice?.Name;
     public BluetoothState BluetoothState => _bluetoothLe.State;
+
+    public Task<bool> RequestEnableBluetoothAsync(
+    CancellationToken cancellationToken = default)
+    {
+        return _bleCentral.RequestEnableBluetoothAsync(
+            cancellationToken
+        );
+    }
+
+    // ========================================================
+    // HANDLE BLUETOOTH POWER CHANGES
+    // ========================================================
+
+    private void OnCentralBluetoothPowerStateChanged(bool isOn)
+    {
+        Debug.WriteLine(
+            $"[BLE] Bluetooth power changed: {(isOn ? "ON" : "OFF")}"
+        );
+
+        BluetoothPowerStateChanged?.Invoke(isOn);
+
+        if (!isOn ||
+            _manualDisconnectRequested ||
+            IsConnected)
+        {
+            return;
+        }
+
+        // Wake the existing automatic connection loop immediately.
+        WakeAutoConnectLoop();
+
+        // Start a new loop only when one is not already running.
+        StartAutoConnectCore();
+    }
+
+    private void WakeAutoConnectLoop()
+    {
+        try
+        {
+            _autoConnectWakeSignal.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // A wake-up signal is already pending.
+        }
+    }
 
     /// <summary>Requests the runtime permissions required by the current platform.</summary>
     public Task EnsurePermissionsAsync()
@@ -669,8 +763,8 @@ public sealed class BluetoothService
                     $"EMOTIX360 not found. Retrying in {delaySeconds} seconds..."
                 );
 
-                await Task.Delay(
-                    TimeSpan.FromSeconds(delaySeconds),
+                await WaitForAutoConnectRetryAsync(
+                    delaySeconds,
                     cancellationToken
                 );
             }

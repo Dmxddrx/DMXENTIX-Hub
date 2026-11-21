@@ -19,12 +19,44 @@ public sealed class DeviceViewModel : ObservableObject
 
     private bool _scanStoppedForConnection;
 
+    private bool _isEnablingBluetooth;
+
     private ModelDeviceInfo? _selectedDevice;
 
     private string _statusMessage =
         "Scan to find your nearby EMOTIX360.";
 
     private readonly DeviceDiscoveryService _deviceDiscovery;
+
+    // ========================================================
+    // HANDLE BLUETOOTH POWER STATE
+    // ========================================================
+
+    private void OnBluetoothPowerStateChanged(bool isOn)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            OnPropertyChanged(nameof(ConnectionText));
+            OnPropertyChanged(nameof(ScanButtonText));
+
+            RefreshCommandStates();
+
+            if (IsConnected)
+                return;
+
+            if (isOn)
+            {
+                StatusMessage =
+                    "Bluetooth is on. Searching automatically for EMOTIX360...";
+            }
+            else
+            {
+                StatusMessage = OperatingSystem.IsAndroid()
+                    ? "Bluetooth is off. Tap TURN ON BLUETOOTH to continue."
+                    : "Bluetooth is off. Turn it on in your device Settings.";
+            }
+        });
+    }
 
     public DeviceViewModel(
         BluetoothService bluetooth,
@@ -64,6 +96,9 @@ public sealed class DeviceViewModel : ObservableObject
         _bluetooth.ConnectionProgressChanged +=
             OnConnectionProgressChanged;
 
+        _bluetooth.BluetoothPowerStateChanged +=
+            OnBluetoothPowerStateChanged;
+
         // ----------------------------------------------------
         // RESTORE CURRENT CONNECTION STATE
         // ----------------------------------------------------
@@ -77,6 +112,12 @@ public sealed class DeviceViewModel : ObservableObject
             StatusMessage =
                 $"Connected to {_bluetooth.ConnectedDeviceName ?? BluetoothService.DeviceName}.";
         }
+        else if (!_bluetooth.IsBluetoothOn)
+        {
+            StatusMessage = OperatingSystem.IsAndroid()
+                ? "Bluetooth is off. Turn it on to find EMOTIX360."
+                : "Bluetooth is off. Turn on Bluetooth in your device Settings.";
+        }
         else if (IsAutoConnecting)
         {
             StatusMessage =
@@ -86,6 +127,24 @@ public sealed class DeviceViewModel : ObservableObject
         {
             StatusMessage =
                 $"Remembered device: {_bluetooth.RememberedDeviceName ?? BluetoothService.DeviceName}.";
+        }
+    }
+
+    // ========================================================
+    // BLUETOOTH ACTIVATION STATE
+    // ========================================================
+
+    public bool IsEnablingBluetooth
+    {
+        get => _isEnablingBluetooth;
+        private set
+        {
+            if (SetProperty(ref _isEnablingBluetooth, value))
+            {
+                OnPropertyChanged(nameof(ScanButtonText));
+
+                RefreshCommandStates();
+            }
         }
     }
 
@@ -190,11 +249,13 @@ public sealed class DeviceViewModel : ObservableObject
     public string ConnectionText =>
         IsConnected
             ? "Connected"
-            : IsAutoConnecting
-                ? "Connecting automatically"
-                : IsConnecting
-                    ? "Connecting..."
-                    : "Not connected";
+            : !_bluetooth.IsBluetoothOn
+                ? "Bluetooth off"
+                : IsAutoConnecting
+                    ? "Connecting automatically"
+                    : IsConnecting
+                        ? "Connecting..."
+                        : "Not connected";
 
 
     // ========================================================
@@ -230,20 +291,29 @@ public sealed class DeviceViewModel : ObservableObject
     // ========================================================
 
     public string ScanButtonText =>
-        IsScanning
-            ? "SCANNING..."
-            : IsAutoConnecting
-                ? "AUTOMATIC SEARCH ACTIVE"
-                : "SCAN FOR EMOTIX360";
+        IsEnablingBluetooth
+            ? "REQUESTING BLUETOOTH..."
+            : IsScanning
+                ? "SCANNING..."
+                : !_bluetooth.IsBluetoothOn
+                    ? OperatingSystem.IsAndroid()
+                        ? "TURN ON BLUETOOTH"
+                        : "ENABLE BLUETOOTH IN SETTINGS"
+                    : IsAutoConnecting
+                        ? "AUTOMATIC SEARCH ACTIVE"
+                        : "SCAN FOR EMOTIX360";
 
     public bool CanScan =>
+        !IsEnablingBluetooth &&
         !IsScanning &&
         !IsConnecting &&
         !IsConnected &&
-        !IsAutoConnecting;
+        (!_bluetooth.IsAutoConnecting || !_bluetooth.IsBluetoothOn) &&
+        (_bluetooth.IsBluetoothOn || OperatingSystem.IsAndroid());
 
     public bool CanConnectSelected =>
         SelectedDevice is not null &&
+        _bluetooth.IsBluetoothOn &&
         !IsScanning &&
         !IsConnecting &&
         !IsConnected &&
@@ -258,6 +328,14 @@ public sealed class DeviceViewModel : ObservableObject
     {
         if (!CanScan)
             return;
+
+        // When Bluetooth is off, the scan button becomes
+        // a request to enable Bluetooth.
+        if (!_bluetooth.IsBluetoothOn)
+        {
+            await RequestBluetoothEnableAsync();
+            return;
+        }
 
         Devices.Clear();
 
@@ -307,6 +385,52 @@ public sealed class DeviceViewModel : ObservableObject
         finally
         {
             IsScanning = false;
+        }
+    }
+
+    // ========================================================
+    // REQUEST BLUETOOTH ACTIVATION
+    // ========================================================
+
+    private async Task RequestBluetoothEnableAsync()
+    {
+        if (IsEnablingBluetooth)
+            return;
+
+        IsEnablingBluetooth = true;
+
+        StatusMessage =
+            "Waiting for permission to turn on Bluetooth...";
+
+        try
+        {
+            bool enabled =
+                await _bluetooth.RequestEnableBluetoothAsync();
+
+            if (enabled)
+            {
+                StatusMessage =
+                    "Bluetooth enabled. Searching for EMOTIX360...";
+            }
+            else
+            {
+                StatusMessage =
+                    "Bluetooth was not enabled. Tap TURN ON BLUETOOTH to try again.";
+            }
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            StatusMessage =
+                $"Bluetooth permission denied: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage =
+                $"Could not enable Bluetooth: {ex.Message}";
+        }
+        finally
+        {
+            IsEnablingBluetooth = false;
         }
     }
 

@@ -4,6 +4,10 @@ using Plugin.BLE.Abstractions;
 using Plugin.BLE.Abstractions.Contracts;
 using Plugin.BLE.Abstractions.EventArgs;
 using System.Diagnostics;
+#if ANDROID
+using EMOTIX360.App.Platforms.Android;
+#endif
+
 
 namespace EMOTIX360.App.Services;
 
@@ -36,6 +40,7 @@ public sealed class BleCentralService
     public event Action? ScanStarting;
     public event Action? ScanCompleted;
 
+    public event Action<bool>? BluetoothPowerStateChanged;
 
     private readonly object _devicesLock = new();
     private readonly Dictionary<Guid, IDevice> _discoveredDevices = new();
@@ -57,12 +62,37 @@ public sealed class BleCentralService
         }
     }
 
+    // ========================================================
+    // BLUETOOTH POWER STATE
+    // ========================================================
+
+    private void OnBluetoothStateChanged(
+        object? sender,
+        BluetoothStateChangedArgs args)
+    {
+        Debug.WriteLine(
+            $"[BleCentral] Bluetooth state changed: {args.NewState}"
+        );
+
+        if (args.NewState == BluetoothState.On)
+        {
+            BluetoothPowerStateChanged?.Invoke(true);
+        }
+        else if (args.NewState == BluetoothState.Off)
+        {
+            BluetoothPowerStateChanged?.Invoke(false);
+        }
+    }
+
     public BleCentralService()
     {
         BluetoothLe = CrossBluetoothLE.Current;
         Adapter = BluetoothLe.Adapter;
 
         Adapter.DeviceDiscovered += OnAdapterDeviceDiscovered;
+
+        // Monitor Bluetooth being switched on or off by the user.
+        BluetoothLe.StateChanged += OnBluetoothStateChanged;
     }
 
     /// <summary>
@@ -82,6 +112,45 @@ public sealed class BleCentralService
         }
 #endif
         // iOS requests Bluetooth permission through CoreBluetooth.
+    }
+
+    // ========================================================
+    // REQUEST BLUETOOTH ACTIVATION
+    // ========================================================
+
+    public async Task<bool> RequestEnableBluetoothAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (IsBluetoothOn)
+            return true;
+
+        // Android 12+ requires BLUETOOTH_CONNECT permission
+        // for the Bluetooth activation request.
+        await EnsurePermissionsAsync();
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+#if ANDROID
+
+        bool enabled = await BluetoothEnableRequest.RequestAsync(
+            cancellationToken
+        );
+
+        Debug.WriteLine(
+            $"[BleCentral] Bluetooth activation result: {enabled}"
+        );
+
+        return enabled;
+
+#else
+
+    throw new PlatformNotSupportedException(
+        "Automatic Bluetooth activation requests are currently " +
+        "supported on Android only. Please enable Bluetooth " +
+        "through your device Settings."
+    );
+
+#endif
     }
 
     /// <summary>
