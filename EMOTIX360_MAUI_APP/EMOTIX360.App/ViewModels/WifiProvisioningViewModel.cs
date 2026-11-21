@@ -12,9 +12,11 @@ namespace EMOTIX360.App.ViewModels
 {
     public sealed class WifiProvisioningViewModel : ObservableObject
     {
-        private readonly BluetoothService _bluetooth;
+        private readonly DeviceSessionSelectionService _sessionSelection;
         private readonly WifiProvisioningService _provisioning;
         private readonly WifiNetworkInfoService _phoneWifi;
+
+        private IDeviceSession? _session;
 
         private string _ssid = string.Empty;
         private string _password = string.Empty;
@@ -37,11 +39,11 @@ namespace EMOTIX360.App.ViewModels
         private bool _waitingForDeviceResult;
 
         public WifiProvisioningViewModel(
-            BluetoothService bluetooth,
+            DeviceSessionSelectionService sessionSelection,
             WifiProvisioningService provisioning,
             WifiNetworkInfoService phoneWifi)
         {
-            _bluetooth = bluetooth;
+            _sessionSelection = sessionSelection;
             _provisioning = provisioning;
             _phoneWifi = phoneWifi;
 
@@ -65,20 +67,96 @@ namespace EMOTIX360.App.ViewModels
                 () => CanClearStoredNetworks
             );
 
-            _bluetooth.ConnectionChanged += OnConnectionChanged;
-            _bluetooth.ActiveSessionChanged += OnActiveSessionChanged;
+            _sessionSelection.SelectedSessionChanged +=
+                OnSelectedSessionChanged;
 
             _provisioning.StatusUpdated += OnStatusUpdated;
             _provisioning.StatusCleared += OnStatusCleared;
 
-            IsConnected = _bluetooth.IsConnected;
-
-            _provisioning.SetSession(_bluetooth.ActiveSession);
+            // Restore the currently selected session.
+            OnSelectedSessionChanged(
+                _sessionSelection.SelectedSession
+            );
         }
 
-        private void OnActiveSessionChanged(IDeviceSession? session)
+        // ========================================================
+        // SELECTED DEVICE SESSION
+        // ========================================================
+
+        private void OnSelectedSessionChanged(IDeviceSession? session)
         {
+            // Remove the previous session subscription.
+            if (_session is not null)
+            {
+                _session.StateChanged -= OnSessionStateChanged;
+            }
+
+            _session = session;
+
+            // Subscribe to the newly selected session.
+            if (_session is not null)
+            {
+                _session.StateChanged += OnSessionStateChanged;
+            }
+
+            // Tell the provisioning service which device to monitor.
             _provisioning.SetSession(session);
+
+            MainThread.BeginInvokeOnMainThread(
+                UpdateConnectionState
+            );
+        }
+
+        // ========================================================
+        // SESSION CONNECTION STATE
+        // ========================================================
+
+        private void OnSessionStateChanged(IDeviceSession session)
+        {
+            if (!ReferenceEquals(session, _session))
+                return;
+
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                if (!ReferenceEquals(session, _session))
+                    return;
+
+                UpdateConnectionState();
+            });
+        }
+
+        // ========================================================
+        // UPDATE CONNECTION STATE
+        // ========================================================
+
+        private void UpdateConnectionState()
+        {
+            bool connected = _session?.IsConnected == true;
+
+            IsConnected = connected;
+
+            if (!connected)
+            {
+                _waitingForDeviceResult = false;
+
+                HasDeviceStatus = false;
+                StoredNetworkCount = 0;
+
+                StatusMessage =
+                    "Connect to EMOTIX360 to configure Wi-Fi.";
+
+                return;
+            }
+
+            if (_provisioning.CurrentStatus is not null)
+            {
+                ApplyDeviceStatus(_provisioning.CurrentStatus);
+            }
+            else
+            {
+                StatusMessage =
+                    "Connected. Reading device Wi-Fi status...";
+            }
         }
 
         // --------------------------------------------------------
@@ -293,7 +371,7 @@ namespace EMOTIX360.App.ViewModels
 
         private async Task SendCredentialsAsync()
         {
-            IDeviceSession? session = _bluetooth.ActiveSession;
+            IDeviceSession? session = _session;
 
             if (!CanSendCredentials ||
                 session is null ||
@@ -344,7 +422,7 @@ namespace EMOTIX360.App.ViewModels
 
         private async Task ClearStoredNetworksAsync()
         {
-            IDeviceSession? session = _bluetooth.ActiveSession;
+            IDeviceSession? session = _session;
 
             if (!CanClearStoredNetworks ||
                 session is null ||
@@ -487,39 +565,6 @@ namespace EMOTIX360.App.ViewModels
             RefreshCommandStates();
         }
 
-        // ========================================================
-        // HANDLE BLE CONNECTION CHANGES
-        // ========================================================
-
-        private void OnConnectionChanged(
-            bool connected,
-            string? detail)
-        {
-            MainThread.BeginInvokeOnMainThread(() =>
-            {
-                IsConnected = connected;
-
-                if (!connected)
-                {
-                    _waitingForDeviceResult = false;
-
-                    HasDeviceStatus = false;
-                    StoredNetworkCount = 0;
-
-                    StatusMessage =
-                        "Connect to EMOTIX360 to configure Wi-Fi.";
-                }
-                else if (_provisioning.CurrentStatus is not null)
-                {
-                    ApplyDeviceStatus(_provisioning.CurrentStatus);
-                }
-                else
-                {
-                    StatusMessage =
-                        "Connected. Reading device Wi-Fi status...";
-                }
-            });
-        }
 
         // ========================================================
         // COMMAND STATE UPDATES
