@@ -6,6 +6,8 @@ using EMOTIX360.App.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using EMOTIX360.App.Services.Devices.Profiles;
+using EMOTIX360.App.Services.Bluetooth;
+using EMOTIX360.App.Services.Devices.Protocols;
 
 namespace EMOTIX360.App;
 
@@ -24,14 +26,20 @@ public static class MauiProgram
         // One shared BLE adapter and scanner for the application.
         builder.Services.AddSingleton<BleCentralService>();
 
-        // Supported product profiles.
-        // Initially, only EMOTIX360 is registered.
+        // Product advertisement profiles.
         builder.Services.AddSingleton<IDeviceProfile, Emotix360DeviceProfile>();
 
-        // Identifies supported products from raw BLE advertisements.
+        // Product discovery.
         builder.Services.AddSingleton<DeviceDiscoveryService>();
 
-        // Existing EMOTIX360 connection and GATT management.
+        // Registered product BLE protocols.
+        // These protocol definitions are stateless and can be shared.
+        builder.Services.AddSingleton<IDeviceProtocol, Emotix360Protocol>();
+
+        // Multi-device session manager.
+        builder.Services.AddSingleton<BleConnectionManager>();
+
+        // Existing connection service remains temporarily for compatibility.
         builder.Services.AddSingleton<BluetoothService>();
 
         builder.Services.AddSingleton<DeviceCommandService>();

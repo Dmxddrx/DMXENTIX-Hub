@@ -63,226 +63,117 @@
                  └─ Application description
 
         NOTES:
-        - Resource styles control animation highlighting.
-        - Animation selection is handled through TapGestureRecognizers.
-        - Dashboard values are populated through ViewModel bindings.
-        - ScrollView handles scrolling for the complete dashboard.
+- Resource styles control animation highlighting.
+- Animation selection is handled through TapGestureRecognizers.
+- Dashboard values are populated through ViewModel bindings.
+- ScrollView handles scrolling for the complete dashboard.
     -->
-    
+
+    <!-- ============================================================ -->
+    <!-- RESOURCES                                                    -->
+    <!-- ============================================================ -->
     <ContentPage.Resources>
         <ResourceDictionary>
 
-            <!-- NORMAL ANIMATION TILE -->
+            <!-- ── AnimationTileBorderStyle ────────────────────────── -->
             <Style
-            x:Key="AnimationTileBorderStyle"
-            TargetType="Border">
+                x:Key="AnimationTileBorderStyle"
+                TargetType="Border">
 
-                <Setter Property="BackgroundColor"
-                    Value="#121C2B" />
+                <Setter Property="BackgroundColor" Value="#121C2B" />
+                <Setter Property="Stroke" Value="#26364A" />
+                <Setter Property="StrokeThickness" Value="1" />
+                <Setter Property="Padding" Value="13" />
 
-                <Setter Property="Stroke"
-                    Value="#26364A" />
-
-                <Setter Property="StrokeThickness"
-                    Value="1" />
-
-                <Setter Property="Padding"
-                    Value="13" />
-
+                <!-- DataTriggers for highlighted animation modes -->
                 <Style.Triggers>
 
                     <!-- IDLE -->
-                    <DataTrigger
-                    TargetType="Border"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="IDLE">
-
-                        <Setter Property="BackgroundColor"
-                            Value="#17253A" />
-
-                        <Setter Property="Stroke"
-                            Value="#5796FF" />
-
+                    <DataTrigger TargetType="Border" Binding="{Binding HighlightedModeKey}" Value="IDLE">
+                        <Setter Property="BackgroundColor" Value="#17253A" />
+                        <Setter Property="Stroke" Value="#5796FF" />
                     </DataTrigger>
 
                     <!-- SAND CLOCK -->
-                    <DataTrigger
-                    TargetType="Border"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="SAND_CLOCK">
-
-                        <Setter Property="BackgroundColor"
-                            Value="#17253A" />
-
-                        <Setter Property="Stroke"
-                            Value="#5796FF" />
-
+                    <DataTrigger TargetType="Border" Binding="{Binding HighlightedModeKey}" Value="SAND_CLOCK">
+                        <Setter Property="BackgroundColor" Value="#17253A" />
+                        <Setter Property="Stroke" Value="#5796FF" />
                     </DataTrigger>
 
                     <!-- WATER -->
-                    <DataTrigger
-                    TargetType="Border"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="WATER">
-
-                        <Setter Property="BackgroundColor"
-                            Value="#17253A" />
-
-                        <Setter Property="Stroke"
-                            Value="#5796FF" />
-
+                    <DataTrigger TargetType="Border" Binding="{Binding HighlightedModeKey}" Value="WATER">
+                        <Setter Property="BackgroundColor" Value="#17253A" />
+                        <Setter Property="Stroke" Value="#5796FF" />
                     </DataTrigger>
 
                     <!-- SAND GRAVITY -->
-                    <DataTrigger
-                    TargetType="Border"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="SAND_GRAVITY">
-
-                        <Setter Property="BackgroundColor"
-                            Value="#17253A" />
-
-                        <Setter Property="Stroke"
-                            Value="#5796FF" />
-
+                    <DataTrigger TargetType="Border" Binding="{Binding HighlightedModeKey}" Value="SAND_GRAVITY">
+                        <Setter Property="BackgroundColor" Value="#17253A" />
+                        <Setter Property="Stroke" Value="#5796FF" />
                     </DataTrigger>
 
                     <!-- HEART -->
-                    <DataTrigger
-                    TargetType="Border"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="HEART">
-
-                        <Setter Property="BackgroundColor"
-                            Value="#17253A" />
-
-                        <Setter Property="Stroke"
-                            Value="#5796FF" />
-
+                    <DataTrigger TargetType="Border" Binding="{Binding HighlightedModeKey}" Value="HEART">
+                        <Setter Property="BackgroundColor" Value="#17253A" />
+                        <Setter Property="Stroke" Value="#5796FF" />
                     </DataTrigger>
 
                     <!-- RAIN -->
-                    <DataTrigger
-                    TargetType="Border"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="RAIN">
-
-                        <Setter Property="BackgroundColor"
-                            Value="#17253A" />
-
-                        <Setter Property="Stroke"
-                            Value="#5796FF" />
-
+                    <DataTrigger TargetType="Border" Binding="{Binding HighlightedModeKey}" Value="RAIN">
+                        <Setter Property="BackgroundColor" Value="#17253A" />
+                        <Setter Property="Stroke" Value="#5796FF" />
                     </DataTrigger>
 
                     <!-- WAVES -->
-                    <DataTrigger
-                    TargetType="Border"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="WAVES">
-
-                        <Setter Property="BackgroundColor"
-                            Value="#17253A" />
-
-                        <Setter Property="Stroke"
-                            Value="#5796FF" />
-
+                    <DataTrigger TargetType="Border" Binding="{Binding HighlightedModeKey}" Value="WAVES">
+                        <Setter Property="BackgroundColor" Value="#17253A" />
+                        <Setter Property="Stroke" Value="#5796FF" />
                     </DataTrigger>
 
                 </Style.Triggers>
             </Style>
 
 
-            <!-- ANIMATION TILE TEXT -->
+            <!-- ── AnimationTileLabelStyle ─────────────────────────── -->
             <Style
-            x:Key="AnimationTileLabelStyle"
-            TargetType="Label">
+                x:Key="AnimationTileLabelStyle"
+                TargetType="Label">
 
-                <Setter Property="TextColor"
-                    Value="#C4D0E0" />
+                <Setter Property="TextColor" Value="#C4D0E0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="FontAttributes" Value="Bold" />
+                <Setter Property="HorizontalTextAlignment" Value="Center" />
+                <Setter Property="VerticalTextAlignment" Value="Center" />
 
-                <Setter Property="FontSize"
-                    Value="12" />
-
-                <Setter Property="FontAttributes"
-                    Value="Bold" />
-
-                <Setter Property="HorizontalTextAlignment"
-                    Value="Center" />
-
-                <Setter Property="VerticalTextAlignment"
-                    Value="Center" />
-
+                <!-- DataTriggers for highlighted animation text -->
                 <Style.Triggers>
 
-                    <DataTrigger
-                    TargetType="Label"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="IDLE">
-
-                        <Setter Property="TextColor"
-                            Value="#8EB6FF" />
-
+                    <DataTrigger TargetType="Label" Binding="{Binding HighlightedModeKey}" Value="IDLE">
+                        <Setter Property="TextColor" Value="#8EB6FF" />
                     </DataTrigger>
 
-                    <DataTrigger
-                    TargetType="Label"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="SAND_CLOCK">
-
-                        <Setter Property="TextColor"
-                            Value="#8EB6FF" />
-
+                    <DataTrigger TargetType="Label" Binding="{Binding HighlightedModeKey}" Value="SAND_CLOCK">
+                        <Setter Property="TextColor" Value="#8EB6FF" />
                     </DataTrigger>
 
-                    <DataTrigger
-                    TargetType="Label"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="WATER">
-
-                        <Setter Property="TextColor"
-                            Value="#8EB6FF" />
-
+                    <DataTrigger TargetType="Label" Binding="{Binding HighlightedModeKey}" Value="WATER">
+                        <Setter Property="TextColor" Value="#8EB6FF" />
                     </DataTrigger>
 
-                    <DataTrigger
-                    TargetType="Label"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="SAND_GRAVITY">
-
-                        <Setter Property="TextColor"
-                            Value="#8EB6FF" />
-
+                    <DataTrigger TargetType="Label" Binding="{Binding HighlightedModeKey}" Value="SAND_GRAVITY">
+                        <Setter Property="TextColor" Value="#8EB6FF" />
                     </DataTrigger>
 
-                    <DataTrigger
-                    TargetType="Label"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="HEART">
-
-                        <Setter Property="TextColor"
-                            Value="#8EB6FF" />
-
+                    <DataTrigger TargetType="Label" Binding="{Binding HighlightedModeKey}" Value="HEART">
+                        <Setter Property="TextColor" Value="#8EB6FF" />
                     </DataTrigger>
 
-                    <DataTrigger
-                    TargetType="Label"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="RAIN">
-
-                        <Setter Property="TextColor"
-                            Value="#8EB6FF" />
-
+                    <DataTrigger TargetType="Label" Binding="{Binding HighlightedModeKey}" Value="RAIN">
+                        <Setter Property="TextColor" Value="#8EB6FF" />
                     </DataTrigger>
 
-                    <DataTrigger
-                    TargetType="Label"
-                    Binding="{Binding HighlightedModeKey}"
-                    Value="WAVES">
-
-                        <Setter Property="TextColor"
-                            Value="#8EB6FF" />
-
+                    <DataTrigger TargetType="Label" Binding="{Binding HighlightedModeKey}" Value="WAVES">
+                        <Setter Property="TextColor" Value="#8EB6FF" />
                     </DataTrigger>
 
                 </Style.Triggers>
@@ -290,15 +181,22 @@
 
         </ResourceDictionary>
     </ContentPage.Resources>
-    
+
+
+    <!-- ============================================================ -->
+    <!-- SCROLLVIEW (MAIN CONTENT)                                    -->
+    <!-- ============================================================ -->
     <ScrollView>
         <VerticalStackLayout
             Padding="22,26,22,30"
             Spacing="23">
 
-            <!-- HEADER -->
+            <!-- ======================================================== -->
+            <!-- 1. HEADER                                                -->
+            <!-- ======================================================== -->
             <Grid ColumnDefinitions="*,Auto">
 
+                <!-- Application name -->
                 <VerticalStackLayout Spacing="3">
 
                     <Label
@@ -316,7 +214,7 @@
 
                 </VerticalStackLayout>
 
-                <!-- CONNECTION INDICATOR -->
+                <!-- BLE connection indicator -->
                 <Border
                     Grid.Column="1"
                     BackgroundColor="#192638"
@@ -354,9 +252,12 @@
             </Grid>
 
 
-            <!-- WELCOME -->
+            <!-- ======================================================== -->
+            <!-- 2. WELCOME SECTION                                       -->
+            <!-- ======================================================== -->
             <VerticalStackLayout Spacing="5">
 
+                <!-- Welcome heading -->
                 <Label
                     Text="Your device."
                     FontSize="32"
@@ -369,6 +270,7 @@
                     FontAttributes="Bold"
                     TextColor="#5796FF" />
 
+                <!-- Description -->
                 <Label
                     Text="Control and explore your EMOTIX360."
                     FontSize="14"
@@ -378,7 +280,9 @@
             </VerticalStackLayout>
 
 
-            <!-- DEVICE CONNECTION CARD -->
+            <!-- ======================================================== -->
+            <!-- 3. DEVICE CONNECTION CARD                                -->
+            <!-- ======================================================== -->
             <Border
                 BackgroundColor="#142135"
                 Stroke="#263C58"
@@ -391,6 +295,7 @@
 
                 <VerticalStackLayout Spacing="15">
 
+                    <!-- Connection information -->
                     <Grid ColumnDefinitions="*,Auto">
 
                         <Label
@@ -426,12 +331,14 @@
 
                     </VerticalStackLayout>
 
+                    <!-- Connection description -->
                     <Label
                         Text="Connect to your display to access animations, brightness and live device information."
                         FontSize="13"
                         TextColor="#9BAAC0"
                         LineHeight="1.35" />
 
+                    <!-- Open Device page button -->
                     <Button
                         Text="{Binding ConnectButtonText}"
                         Command="{Binding OpenDeviceCommand}"
@@ -448,9 +355,12 @@
             </Border>
 
 
-            <!-- DEVICE OVERVIEW -->
+            <!-- ======================================================== -->
+            <!-- 4. DEVICE OVERVIEW                                       -->
+            <!-- ======================================================== -->
             <VerticalStackLayout Spacing="12">
 
+                <!-- Overview heading and status -->
                 <Grid ColumnDefinitions="*,Auto">
 
                     <Label
@@ -476,7 +386,7 @@
                     ColumnSpacing="11"
                     RowSpacing="11">
 
-                    <!-- ACTIVE MODE -->
+                    <!-- ── Active mode card ──────────────────────────── -->
                     <Border
                         Grid.Row="0"
                         Grid.Column="0"
@@ -513,7 +423,7 @@
                     </Border>
 
 
-                    <!-- BRIGHTNESS -->
+                    <!-- ── Brightness card ───────────────────────────── -->
                     <Border
                         Grid.Row="0"
                         Grid.Column="1"
@@ -550,7 +460,7 @@
                     </Border>
 
 
-                    <!-- WIFI STATUS -->
+                    <!-- ── Wi-Fi status card ─────────────────────────── -->
                     <Border
                         Grid.Row="1"
                         Grid.Column="0"
@@ -587,7 +497,7 @@
                     </Border>
 
 
-                    <!-- MOTION SENSOR -->
+                    <!-- ── Motion sensor card ────────────────────────── -->
                     <Border
                         Grid.Row="1"
                         Grid.Column="1"
@@ -625,36 +535,59 @@
 
                 </Grid>
 
-                            <VerticalStackLayout Spacing="8" Margin="0,4,0,0">
+
+                <!-- ── Brightness control ────────────────────────────── -->
+                <VerticalStackLayout Spacing="8" Margin="0,4,0,0">
+
                     <Grid ColumnDefinitions="*,Auto">
-                        <Label Text="MATRIX BRIGHTNESS"
-                               FontSize="10" FontAttributes="Bold"
-                               CharacterSpacing="1" TextColor="#8495AE" />
-                        <Label Grid.Column="1"
-                               Text="{Binding BrightnessSliderText}"
-                               FontSize="11" FontAttributes="Bold"
-                               TextColor="#E5BD70" />
+                        <Label
+                            Text="MATRIX BRIGHTNESS"
+                            FontSize="10"
+                            FontAttributes="Bold"
+                            CharacterSpacing="1"
+                            TextColor="#8495AE" />
+
+                        <Label
+                            Grid.Column="1"
+                            Text="{Binding BrightnessSliderText}"
+                            FontSize="11"
+                            FontAttributes="Bold"
+                            TextColor="#E5BD70" />
                     </Grid>
-                    <Slider Minimum="0" Maximum="15"
-                            Value="{Binding BrightnessValue, Mode=TwoWay}"
-                            DragStartedCommand="{Binding BrightnessDragStartedCommand}"
-                            DragCompletedCommand="{Binding BrightnessDragCompletedCommand}"
-                            MinimumTrackColor="#5796FF"
-                            MaximumTrackColor="#26364A"
-                            ThumbColor="#F2F5FC" />
-                    <Button Text="APPLY BRIGHTNESS"
-                            Command="{Binding ApplyBrightnessCommand}"
-                            BackgroundColor="#263C58"
-                            TextColor="#DDE9FF"
-                            FontAttributes="Bold" FontSize="11"
-                            HeightRequest="44" CornerRadius="12" />
+
+                    <!-- Brightness slider -->
+                    <Slider
+                        Minimum="0"
+                        Maximum="15"
+                        Value="{Binding BrightnessValue, Mode=TwoWay}"
+                        DragStartedCommand="{Binding BrightnessDragStartedCommand}"
+                        DragCompletedCommand="{Binding BrightnessDragCompletedCommand}"
+                        MinimumTrackColor="#5796FF"
+                        MaximumTrackColor="#26364A"
+                        ThumbColor="#F2F5FC" />
+
+                    <!-- Apply brightness button -->
+                    <Button
+                        Text="APPLY BRIGHTNESS"
+                        Command="{Binding ApplyBrightnessCommand}"
+                        BackgroundColor="#263C58"
+                        TextColor="#DDE9FF"
+                        FontAttributes="Bold"
+                        FontSize="11"
+                        HeightRequest="44"
+                        CornerRadius="12" />
+
                 </VerticalStackLayout>
-</VerticalStackLayout>
+
+            </VerticalStackLayout>
 
 
-            <!-- ANIMATION MODES -->
+            <!-- ======================================================== -->
+            <!-- 5. ANIMATION MODES                                       -->
+            <!-- ======================================================== -->
             <VerticalStackLayout Spacing="12">
 
+                <!-- Animation section heading -->
                 <Grid ColumnDefinitions="*,Auto">
 
                     <Label
@@ -673,174 +606,176 @@
 
                 </Grid>
 
+                <!-- ── Two-column animation grid ─────────────────────── -->
                 <Grid
                     ColumnDefinitions="*,*"
                     RowDefinitions="Auto,Auto,Auto,Auto"
                     ColumnSpacing="10"
                     RowSpacing="10">
 
-                                    <!-- IDLE -->
-                                    <Border
+                    <!-- IDLE -->
+                    <Border
                         Grid.Row="0"
                         Grid.Column="0"
                         Style="{StaticResource AnimationTileBorderStyle}">
 
-                                        <Border.StrokeShape>
-                                            <RoundRectangle CornerRadius="13" />
-                                        </Border.StrokeShape>
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
 
-                                        <Border.GestureRecognizers>
-                                            <TapGestureRecognizer
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="IDLE" />
-                                        </Border.GestureRecognizers>
+                        </Border.GestureRecognizers>
 
-                                        <Label
+                        <Label
                             Text="IDLE"
                             Style="{StaticResource AnimationTileLabelStyle}" />
 
-                                    </Border>
+                    </Border>
 
 
-                                    <!-- SAND CLOCK -->
-                                    <Border
+                    <!-- SAND CLOCK -->
+                    <Border
                         Grid.Row="0"
                         Grid.Column="1"
                         Style="{StaticResource AnimationTileBorderStyle}">
 
-                                        <Border.StrokeShape>
-                                            <RoundRectangle CornerRadius="13" />
-                                        </Border.StrokeShape>
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
 
-                                        <Border.GestureRecognizers>
-                                            <TapGestureRecognizer
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="SAND_CLOCK" />
-                                        </Border.GestureRecognizers>
+                        </Border.GestureRecognizers>
 
-                                        <Label
+                        <Label
                             Text="SAND CLOCK"
                             Style="{StaticResource AnimationTileLabelStyle}" />
 
-                                    </Border>
+                    </Border>
 
 
-                                    <!-- WATER -->
-                                    <Border
+                    <!-- WATER -->
+                    <Border
                         Grid.Row="1"
                         Grid.Column="0"
                         Style="{StaticResource AnimationTileBorderStyle}">
 
-                                        <Border.StrokeShape>
-                                            <RoundRectangle CornerRadius="13" />
-                                        </Border.StrokeShape>
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
 
-                                        <Border.GestureRecognizers>
-                                            <TapGestureRecognizer
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="WATER" />
-                                        </Border.GestureRecognizers>
+                        </Border.GestureRecognizers>
 
-                                        <Label
+                        <Label
                             Text="WATER"
                             Style="{StaticResource AnimationTileLabelStyle}" />
 
-                                    </Border>
+                    </Border>
 
 
-                                    <!-- SAND GRAVITY -->
-                                    <Border
+                    <!-- SAND GRAVITY -->
+                    <Border
                         Grid.Row="1"
                         Grid.Column="1"
                         Style="{StaticResource AnimationTileBorderStyle}">
 
-                                        <Border.StrokeShape>
-                                            <RoundRectangle CornerRadius="13" />
-                                        </Border.StrokeShape>
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
 
-                                        <Border.GestureRecognizers>
-                                            <TapGestureRecognizer
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="SAND_GRAVITY" />
-                                        </Border.GestureRecognizers>
+                        </Border.GestureRecognizers>
 
-                                        <Label
+                        <Label
                             Text="SAND GRAVITY"
                             Style="{StaticResource AnimationTileLabelStyle}" />
 
-                                    </Border>
+                    </Border>
 
 
-                                    <!-- HEART -->
-                                    <Border
+                    <!-- HEART -->
+                    <Border
                         Grid.Row="2"
                         Grid.Column="0"
                         Style="{StaticResource AnimationTileBorderStyle}">
 
-                                        <Border.StrokeShape>
-                                            <RoundRectangle CornerRadius="13" />
-                                        </Border.StrokeShape>
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
 
-                                        <Border.GestureRecognizers>
-                                            <TapGestureRecognizer
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="HEART" />
-                                        </Border.GestureRecognizers>
+                        </Border.GestureRecognizers>
 
-                                        <Label
+                        <Label
                             Text="HEART"
                             Style="{StaticResource AnimationTileLabelStyle}" />
 
-                                    </Border>
+                    </Border>
 
 
-                                    <!-- RAIN -->
-                                    <Border
+                    <!-- RAIN -->
+                    <Border
                         Grid.Row="2"
                         Grid.Column="1"
                         Style="{StaticResource AnimationTileBorderStyle}">
 
-                                        <Border.StrokeShape>
-                                            <RoundRectangle CornerRadius="13" />
-                                        </Border.StrokeShape>
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
 
-                                        <Border.GestureRecognizers>
-                                            <TapGestureRecognizer
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="RAIN" />
-                                        </Border.GestureRecognizers>
+                        </Border.GestureRecognizers>
 
-                                        <Label
+                        <Label
                             Text="RAIN"
                             Style="{StaticResource AnimationTileLabelStyle}" />
 
-                                    </Border>
+                    </Border>
 
 
-                                    <!-- WAVES -->
-                                    <Border
+                    <!-- WAVES -->
+                    <Border
                         Grid.Row="3"
                         Grid.Column="0"
                         Style="{StaticResource AnimationTileBorderStyle}">
 
-                                        <Border.StrokeShape>
-                                            <RoundRectangle CornerRadius="13" />
-                                        </Border.StrokeShape>
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
 
-                                        <Border.GestureRecognizers>
-                                            <TapGestureRecognizer
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="WAVES" />
-                                        </Border.GestureRecognizers>
+                        </Border.GestureRecognizers>
 
-                                        <Label
+                        <Label
                             Text="WAVES"
                             Style="{StaticResource AnimationTileLabelStyle}" />
 
-                                    </Border>
+                    </Border>
 
-                                </Grid>
+                </Grid>
 
+                <!-- Dashboard status message -->
                 <Label
                     Text="{Binding DashboardMessage}"
                     FontSize="11"
@@ -849,12 +784,15 @@
             </VerticalStackLayout>
 
 
-            <!-- FOOTER -->
+            <!-- ======================================================== -->
+            <!-- 6. FOOTER                                                -->
+            <!-- ======================================================== -->
             <VerticalStackLayout
                 Spacing="4"
                 HorizontalOptions="Center"
                 Margin="0,5,0,0">
 
+                <!-- Application name -->
                 <Label
                     Text="EMOTIX360"
                     FontSize="11"
@@ -863,6 +801,7 @@
                     TextColor="#60748F"
                     HorizontalTextAlignment="Center" />
 
+                <!-- Application description -->
                 <Label
                     Text="Interactive Motion-Aware Display"
                     FontSize="10"

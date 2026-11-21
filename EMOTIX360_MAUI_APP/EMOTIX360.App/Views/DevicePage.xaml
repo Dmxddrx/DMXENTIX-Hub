@@ -23,22 +23,24 @@
         └── Footer information
 
         PERFORMANCE:
-        - No outer ScrollView wrapping the CollectionView.
-        - The CollectionView occupies the available remaining space.
-        - The CollectionView handles its own scrolling.
-        - Grid-based layout avoids measuring a nested scrollable list
+- No outer ScrollView wrapping the CollectionView.
+- The CollectionView occupies the available remaining space.
+- The CollectionView handles its own scrolling.
+- Grid-based layout avoids measuring a nested scrollable list
           inside a VerticalStackLayout.
     -->
 
+    <!-- ============================================================ -->
+    <!-- ROOT GRID LAYOUT                                             -->
+    <!-- ============================================================ -->
     <Grid
         Padding="22,26,22,30"
         RowDefinitions="Auto,Auto,*,Auto"
         RowSpacing="20">
 
-        <!-- ===================================================== -->
-        <!-- 1. PAGE HEADER                                        -->
-        <!-- ===================================================== -->
-
+        <!-- ======================================================== -->
+        <!-- 1. HEADER                                                -->
+        <!-- ======================================================== -->
         <VerticalStackLayout
             Grid.Row="0"
             Spacing="5">
@@ -64,10 +66,9 @@
         </VerticalStackLayout>
 
 
-        <!-- ===================================================== -->
-        <!-- 2. CONNECTION STATUS SECTION                          -->
-        <!-- ===================================================== -->
-
+        <!-- ======================================================== -->
+        <!-- 2. CONNECTION STATUS                                     -->
+        <!-- ======================================================== -->
         <Border
             Grid.Row="1"
             BackgroundColor="#142135"
@@ -81,8 +82,7 @@
 
             <VerticalStackLayout Spacing="10">
 
-                <!-- Connection section heading -->
-
+                <!-- ── Connection section heading ────────────────────── -->
                 <Grid ColumnDefinitions="*,Auto">
 
                     <Label
@@ -102,8 +102,7 @@
                 </Grid>
 
 
-                <!-- Current connection state -->
-
+                <!-- ── Current connection state ──────────────────────── -->
                 <Label
                     Text="{Binding ConnectionText}"
                     FontSize="22"
@@ -111,8 +110,7 @@
                     TextColor="#F2F5FC" />
 
 
-                <!-- Connection information and feedback -->
-
+                <!-- ── Connection information and feedback ───────────── -->
                 <Label
                     Text="{Binding StatusMessage}"
                     FontSize="13"
@@ -120,8 +118,7 @@
                     LineBreakMode="WordWrap" />
 
 
-                <!-- Start Bluetooth device discovery -->
-
+                <!-- ── Start Bluetooth device discovery ──────────────── -->
                 <Button
                     Text="{Binding ScanButtonText}"
                     Command="{Binding ScanCommand}"
@@ -139,17 +136,15 @@
         </Border>
 
 
-        <!-- ===================================================== -->
-        <!-- 3. DEVICE DISCOVERY SECTION                           -->
-        <!-- ===================================================== -->
-
+        <!-- ======================================================== -->
+        <!-- 3. DISCOVERY SECTION (GRID)                              -->
+        <!-- ======================================================== -->
         <Grid
             Grid.Row="2"
             RowDefinitions="Auto,*,Auto,Auto"
             RowSpacing="11">
 
-            <!-- Discovered devices heading -->
-
+            <!-- ── Discovered devices heading ────────────────────── -->
             <Grid
                 Grid.Row="0"
                 ColumnDefinitions="*,Auto">
@@ -170,9 +165,8 @@
             </Grid>
 
 
+            <!-- ── CollectionView (Bluetooth discovery results) ──── -->
             <!--
-                Bluetooth discovery results
-
                 IMPORTANT:
                 This CollectionView is placed directly inside a Grid.
                 It receives the remaining available vertical space.
@@ -180,7 +174,6 @@
                 It handles its own scrolling, so an outer ScrollView
                 or fixed HeightRequest is not required.
             -->
-
             <CollectionView
                 Grid.Row="1"
                 ItemsSource="{Binding Devices}"
@@ -188,8 +181,7 @@
                 SelectionMode="Single"
                 VerticalOptions="Fill">
 
-                <!-- Displayed when no supported devices are discovered -->
-
+                <!-- ── EmptyView ───────────────────────────────────── -->
                 <CollectionView.EmptyView>
 
                     <Border
@@ -211,8 +203,7 @@
                 </CollectionView.EmptyView>
 
 
-                <!-- Individual discovered device item -->
-
+                <!-- ── ItemTemplate (Discovered device card) ───────── -->
                 <CollectionView.ItemTemplate>
 
                     <DataTemplate>
@@ -231,7 +222,6 @@
                             <Grid ColumnDefinitions="*,Auto">
 
                                 <!-- Device identification -->
-
                                 <VerticalStackLayout Spacing="4">
 
                                     <Label
@@ -249,7 +239,6 @@
 
 
                                 <!-- Bluetooth signal strength -->
-
                                 <Label
                                     Grid.Column="1"
                                     Text="{Binding SignalText}"
@@ -268,8 +257,7 @@
             </CollectionView>
 
 
-            <!-- Connect to the selected device -->
-
+            <!-- ── Connect button ────────────────────────────────── -->
             <Button
                 Grid.Row="2"
                 Text="CONNECT SELECTED DEVICE"
@@ -284,8 +272,7 @@
                 CornerRadius="14" />
 
 
-            <!-- Disconnect the currently connected device -->
-
+            <!-- ── Disconnect button ─────────────────────────────── -->
             <Button
                 Grid.Row="3"
                 Text="DISCONNECT"
@@ -301,10 +288,9 @@
         </Grid>
 
 
-        <!-- ===================================================== -->
-        <!-- 4. FOOTER INFORMATION                                 -->
-        <!-- ===================================================== -->
-
+        <!-- ======================================================== -->
+        <!-- 4. FOOTER INFORMATION                                    -->
+        <!-- ======================================================== -->
         <Label
             Grid.Row="3"
             Text="Keep EMOTIX360 powered on and within Bluetooth range while connecting."

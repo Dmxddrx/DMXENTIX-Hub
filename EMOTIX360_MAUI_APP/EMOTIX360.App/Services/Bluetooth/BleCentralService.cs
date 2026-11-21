@@ -36,6 +36,27 @@ public sealed class BleCentralService
     public event Action? ScanStarting;
     public event Action? ScanCompleted;
 
+
+    private readonly object _devicesLock = new();
+    private readonly Dictionary<Guid, IDevice> _discoveredDevices = new();
+
+    /// <summary>
+    /// Gets the Plugin.BLE peripheral object associated with a discovered ID.
+    /// The returned object is used internally by the connection manager.
+    /// </summary>
+    public bool TryGetDiscoveredDevice(
+        Guid deviceId,
+        out IDevice? device)
+    {
+        lock (_devicesLock)
+        {
+            return _discoveredDevices.TryGetValue(
+                deviceId,
+                out device
+            );
+        }
+    }
+
     public BleCentralService()
     {
         BluetoothLe = CrossBluetoothLE.Current;
@@ -100,6 +121,13 @@ public sealed class BleCentralService
                 Math.Max(1, (int)duration.TotalMilliseconds);
 
             scanLifecycleStarted = true;
+
+            // Each scan starts with fresh peripheral references.
+            lock (_devicesLock)
+            {
+                _discoveredDevices.Clear();
+            }
+
             ScanStarting?.Invoke();
 
             try
@@ -144,6 +172,12 @@ public sealed class BleCentralService
     object? sender,
     DeviceEventArgs args)
     {
+        // Cache the raw peripheral before forwarding the event.
+        lock (_devicesLock)
+        {
+            _discoveredDevices[args.Device.Id] = args.Device;
+        }
+
         DeviceDiscovered?.Invoke(this, args);
     }
 }
