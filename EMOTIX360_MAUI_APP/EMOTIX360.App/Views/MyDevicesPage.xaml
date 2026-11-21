@@ -77,7 +77,7 @@
                         Grid.Column="1"
                         Text="REFRESH"
                         Command="{Binding RefreshCommand}"
-                        IsEnabled="{Binding IsRefreshing, Converter={StaticResource InverseBooleanConverter}}"
+                        IsEnabled="{Binding CanRefresh}"
                         BackgroundColor="#1A2E49"
                         TextColor="#9EC2FF"
                         FontAttributes="Bold"
