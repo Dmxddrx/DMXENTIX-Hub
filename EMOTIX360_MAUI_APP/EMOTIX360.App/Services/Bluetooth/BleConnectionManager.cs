@@ -1,4 +1,5 @@
-﻿using EMOTIX360.App.Models.Devices;
+﻿using System.Diagnostics;
+using EMOTIX360.App.Models.Devices;
 using EMOTIX360.App.Services.Devices;
 using Plugin.BLE.Abstractions.Contracts;
 
