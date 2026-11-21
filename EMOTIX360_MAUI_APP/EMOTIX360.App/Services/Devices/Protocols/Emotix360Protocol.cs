@@ -1,8 +1,7 @@
 ﻿using System.Text;
 using EMOTIX360.App.Services.Bluetooth;
 using EMOTIX360.App.Services.Devices.Profiles;
-
-using AppDeviceType = EMOTIX360.App.Models.Devices.DeviceType;
+using AppDeviceType = global::EMOTIX360.App.Models.Devices.DeviceType;
 
 namespace EMOTIX360.App.Services.Devices.Protocols;
 

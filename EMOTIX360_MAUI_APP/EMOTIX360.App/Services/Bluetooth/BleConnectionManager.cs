@@ -1,6 +1,7 @@
 ﻿using EMOTIX360.App.Models.Devices;
 using EMOTIX360.App.Services.Devices;
 using Plugin.BLE.Abstractions.Contracts;
+using AppDeviceType = global::EMOTIX360.App.Models.Devices.DeviceType;
 
 namespace EMOTIX360.App.Services.Bluetooth;
 
@@ -17,7 +18,7 @@ public sealed class BleConnectionManager : IAsyncDisposable
 
     private readonly DeviceDiscoveryService _discovery;
 
-    private readonly Dictionary<DeviceType, IDeviceProtocol> _protocols;
+    private readonly Dictionary<AppDeviceType, IDeviceProtocol> _protocols;
 
     private readonly Dictionary<Guid, BleDeviceSession> _sessions = new();
 

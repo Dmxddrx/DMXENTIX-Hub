@@ -1,5 +1,6 @@
 ﻿using EMOTIX360.App.Models.Devices;
 using Plugin.BLE.Abstractions.Contracts;
+using AppDeviceType = global::EMOTIX360.App.Models.Devices.DeviceType;
 
 namespace EMOTIX360.App.Services.Bluetooth;
 
@@ -14,7 +15,7 @@ public interface IDeviceSession : IAsyncDisposable
 {
     Guid DeviceId { get; }
 
-    DeviceType DeviceType { get; }
+    AppDeviceType DeviceType { get; }
 
     string ProductName { get; }
 

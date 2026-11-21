@@ -531,6 +531,22 @@ public sealed class BluetoothService
                 "[BLE] Automatic connection manager started."
             );
 
+            Debug.WriteLine(
+                $"[BLE Diagnostic] Bluetooth state: {_bluetoothLe.State}"
+            );
+
+            Debug.WriteLine(
+                $"[BLE Diagnostic] Bluetooth enabled: {IsBluetoothOn}"
+            );
+
+            Debug.WriteLine(
+                $"[BLE Diagnostic] Remembered device ID: {RememberedDeviceId?.ToString() ?? "None"}"
+            );
+
+            Debug.WriteLine(
+                $"[BLE Diagnostic] Remembered device name: {RememberedDeviceName ?? "None"}"
+            );
+
             ConnectionProgressChanged?.Invoke(
                 "Searching for EMOTIX360..."
             );
@@ -559,14 +575,29 @@ public sealed class BluetoothService
             {
                 try
                 {
+                    Debug.WriteLine(
+                        $"[BLE Diagnostic] Auto-connect iteration started. " +
+                        $"BluetoothState={_bluetoothLe.State}, " +
+                        $"IsBluetoothOn={IsBluetoothOn}, " +
+                        $"IsConnected={IsConnected}"
+                    );
+
                     if (!IsBluetoothOn)
                     {
+                        Debug.WriteLine(
+                            "[BLE Diagnostic] SCAN SKIPPED: Bluetooth is not ON."
+                        );
+
                         ConnectionProgressChanged?.Invoke(
                             "Bluetooth is turned off. Enable Bluetooth."
                         );
                     }
                     else
                     {
+                        Debug.WriteLine(
+                            "[BLE Diagnostic] Bluetooth is ON. Preparing connection attempt."
+                        );
+
                         bool connected = false;
 
                         Guid? rememberedId = RememberedDeviceId;
@@ -693,9 +724,21 @@ public sealed class BluetoothService
             if (IsConnected)
                 return true;
 
+            Debug.WriteLine(
+                "[BLE Diagnostic] Checking BLE permissions for remembered-device connection."
+            );
+
             await EnsurePermissionsAsync();
 
+            Debug.WriteLine(
+                "[BLE Diagnostic] BLE permissions check completed."
+            );
+
             await StopScanAsync();
+
+            Debug.WriteLine(
+                "[BLE Diagnostic] Previous scan stopped. Connecting to remembered device."
+            );
 
             using var attemptCts =
                 CancellationTokenSource.CreateLinkedTokenSource(

@@ -94,11 +94,20 @@ public sealed class BleCentralService
     {
         await _scanSemaphore.WaitAsync(cancellationToken);
 
+        Debug.WriteLine(
+            $"[BleCentral] Scan requested. " +
+            $"BluetoothState={BluetoothState}, " +
+            $"AlreadyScanning={Adapter.IsScanning}"
+        );
+
         bool scanLifecycleStarted = false;
 
         try
         {
             await EnsurePermissionsAsync();
+            Debug.WriteLine(
+                "[BleCentral] BLE permissions verified."
+            );
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -129,11 +138,17 @@ public sealed class BleCentralService
             }
 
             ScanStarting?.Invoke();
+            Debug.WriteLine(
+                $"[BleCentral] Starting BLE scan for {duration.TotalSeconds:F0} seconds."
+            );
 
             try
             {
                 await Adapter.StartScanningForDevicesAsync(
                     cancellationToken: cancellationToken
+                );
+                Debug.WriteLine(
+                    "[BleCentral] BLE scan operation completed."
                 );
             }
             finally
@@ -169,14 +184,22 @@ public sealed class BleCentralService
     }
 
     private void OnAdapterDeviceDiscovered(
-    object? sender,
-    DeviceEventArgs args)
+        object? sender,
+        DeviceEventArgs args)
     {
-        // Cache the raw peripheral before forwarding the event.
+        IDevice device = args.Device;
+
         lock (_devicesLock)
         {
-            _discoveredDevices[args.Device.Id] = args.Device;
+            _discoveredDevices[device.Id] = device;
         }
+
+        Debug.WriteLine(
+            $"[BleCentral] Advertisement received | " +
+            $"Name={device.Name ?? "(unnamed)"} | " +
+            $"ID={device.Id} | " +
+            $"RSSI={device.Rssi} dBm"
+        );
 
         DeviceDiscovered?.Invoke(this, args);
     }

@@ -1,6 +1,5 @@
 ﻿using EMOTIX360.App.Models.Devices;
-
-using AppDeviceType = EMOTIX360.App.Models.Devices.DeviceType;
+using AppDeviceType = global::EMOTIX360.App.Models.Devices.DeviceType;
 
 namespace EMOTIX360.App.Services.Bluetooth;
 

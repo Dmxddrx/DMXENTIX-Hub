@@ -6,6 +6,7 @@ using Plugin.BLE.Abstractions;
 using Plugin.BLE.Abstractions.Contracts;
 using Plugin.BLE.Abstractions.EventArgs;
 using Microsoft.Maui.ApplicationModel;
+using AppDeviceType = global::EMOTIX360.App.Models.Devices.DeviceType;
 
 namespace EMOTIX360.App.Services.Bluetooth;
 
@@ -70,7 +71,7 @@ public sealed class BleDeviceSession : IDeviceSession
 
     public BleDeviceSession(
         Guid deviceId,
-        DeviceType deviceType,
+        AppDeviceType deviceType,
         string productName,
         IAdapter adapter,
         IDeviceProtocol protocol)
@@ -98,7 +99,7 @@ public sealed class BleDeviceSession : IDeviceSession
 
     public Guid DeviceId { get; }
 
-    public DeviceType DeviceType { get; }
+    public AppDeviceType DeviceType { get; }
 
     public string ProductName { get; }
 
