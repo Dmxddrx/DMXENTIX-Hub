@@ -1,4 +1,6 @@
+
 using EMOTIX360.App.Models;
+using EMOTIX360.App.Services.Bluetooth;
 
 namespace EMOTIX360.App.Services;
 
@@ -6,27 +8,43 @@ namespace EMOTIX360.App.Services;
 /// Validates and formats the text protocol expected by the EMOTIX360 firmware.
 /// These are the documented/proposed wire commands; firmware must consume takeCommand()
 /// before the physical animation or brightness can change.
+///
+/// Commands are sent through an explicitly selected device session.
+/// This service does not depend on a global active Bluetooth connection.
 /// </summary>
 public sealed class DeviceCommandService
 {
-    private readonly BluetoothService _bluetooth;
-
-    public DeviceCommandService(BluetoothService bluetooth)
+    /// <summary>
+    /// Sends an animation mode command to the specified device session.
+    /// </summary>
+    public Task SetModeAsync(
+        IDeviceSession session,
+        AnimationMode mode)
     {
-        _bluetooth = bluetooth;
-    }
+        ArgumentNullException.ThrowIfNull(session);
 
-    public Task SetModeAsync(AnimationMode mode)
-    {
         string command = $"MODE={mode.ToFirmwareValue()}";
-        return _bluetooth.WriteCommandAsync(command);
+
+        return session.WriteCommandAsync(command);
     }
 
-    public Task SetBrightnessAsync(int brightness)
+    /// <summary>
+    /// Sends a brightness command to the specified device session.
+    /// </summary>
+    public Task SetBrightnessAsync(
+        IDeviceSession session,
+        int brightness)
     {
-        if (brightness is < 0 or > 15)
-            throw new ArgumentOutOfRangeException(nameof(brightness), "MAX7219 brightness must be between 0 and 15.");
+        ArgumentNullException.ThrowIfNull(session);
 
-        return _bluetooth.WriteCommandAsync($"BRIGHT={brightness}");
+        if (brightness is < 0 or > 15)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(brightness),
+                "MAX7219 brightness must be between 0 and 15."
+            );
+        }
+
+        return session.WriteCommandAsync($"BRIGHT={brightness}");
     }
 }

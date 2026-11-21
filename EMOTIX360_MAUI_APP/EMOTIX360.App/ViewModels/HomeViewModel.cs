@@ -4,6 +4,7 @@ using Microsoft.Maui.Controls;
 using EMOTIX360.App.Models;
 using EMOTIX360.App.Services;
 using Microsoft.Maui.Graphics;
+using EMOTIX360.App.Services.Bluetooth;
 
 namespace EMOTIX360.App.ViewModels;
 
@@ -216,7 +217,9 @@ public sealed class HomeViewModel : ObservableObject
 
     private async Task SelectAnimationAsync(string? wireName)
     {
-        if (!IsConnected)
+        IDeviceSession? session = _bluetooth.ActiveSession;
+
+        if (!IsConnected || session is null || !session.IsConnected)
         {
             DashboardMessage = "Connect to EMOTIX360 before selecting an animation.";
             return;
@@ -238,7 +241,7 @@ public sealed class HomeViewModel : ObservableObject
 
         try
         {
-            await _commands.SetModeAsync(mode);
+            await _commands.SetModeAsync(session, mode);
 
             DashboardMessage =
                 $"Sent {mode.ToDisplayName()} command. Waiting for device status.";
@@ -509,7 +512,9 @@ public sealed class HomeViewModel : ObservableObject
 
     private async Task ApplyBrightnessAsync()
     {
-        if (!IsConnected)
+        IDeviceSession? session = _bluetooth.ActiveSession;
+
+        if (!IsConnected || session is null || !session.IsConnected)
         {
             DashboardMessage =
                 "Connect to EMOTIX360 before changing brightness.";
@@ -532,7 +537,7 @@ public sealed class HomeViewModel : ObservableObject
 
         try
         {
-            await _commands.SetBrightnessAsync(value);
+            await _commands.SetBrightnessAsync(session, value);
 
             DashboardMessage =
                 $"Sent brightness {value}. Waiting for device confirmation.";
