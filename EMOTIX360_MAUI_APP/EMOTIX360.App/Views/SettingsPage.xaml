@@ -8,6 +8,70 @@
     BackgroundColor="#0B111B"
     Shell.NavBarIsVisible="False">
 
+    <!--
+        SETTINGS PAGE STRUCTURE
+
+        ContentPage
+        │
+        └─ ScrollView
+           └─ VerticalStackLayout
+              │
+              ├─ Header
+              │  ├─ Section title
+              │  ├─ Settings heading
+              │  └─ Description
+              │
+              ├─ Appearance
+              │  └─ Application theme information
+              │
+              ├─ Device information
+              │  ├─ Device name
+              │  ├─ Hardware information
+              │  └─ Connection type
+              │
+              ├─ Wi-Fi configuration
+              │  │
+              │  └─ Wi-Fi configuration card
+              │     │
+              │     ├─ Device connection status
+              │     │
+              │     ├─ Phone Wi-Fi
+              │     │  ├─ Current phone SSID
+              │     │  ├─ Refresh phone Wi-Fi button
+              │     │  ├─ Use this network button
+              │     │  └─ Permission information
+              │     │
+              │     ├─ Manual Wi-Fi credentials
+              │     │  ├─ Network name (SSID)
+              │     │  ├─ Wi-Fi password
+              │     │  └─ Credential information
+              │     │
+              │     ├─ Stored network information
+              │     │  └─ Saved app-sent network count
+              │     │
+              │     ├─ Wi-Fi credential operations
+              │     │  ├─ Send Wi-Fi credentials button
+              │     │  └─ Clear app-sent networks button
+              │     │
+              │     └─ Operation status message
+              │
+              ├─ Application information
+              │  ├─ Application name
+              │  ├─ Application version
+              │  └─ Platform information
+              │
+              └─ Footer
+                 ├─ Application name
+                 └─ Application description
+
+        NOTES:
+        - Wi-Fi configuration operations are controlled by SettingsViewModel.
+        - Phone Wi-Fi selection and manual credential entry are separate paths.
+        - App-sent network storage is managed independently from hardcoded
+          firmware Wi-Fi credentials.
+        - ScrollView handles scrolling for the complete settings page.
+    -->
+    
     <ScrollView>
 
         <VerticalStackLayout

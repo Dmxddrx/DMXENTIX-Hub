@@ -8,6 +8,67 @@
     BackgroundColor="#0B111B"
     Shell.NavBarIsVisible="False">
 
+    <!--
+        HOME PAGE STRUCTURE
+
+        ContentPage
+        │
+        ├─ Resources
+        │  ├─ AnimationTileBorderStyle
+        │  │  └─ DataTriggers for highlighted animation modes
+        │  │
+        │  └─ AnimationTileLabelStyle
+        │     └─ DataTriggers for highlighted animation text
+        │
+        └─ ScrollView
+           └─ VerticalStackLayout
+              │
+              ├─ Header
+              │  ├─ Application name
+              │  └─ BLE connection indicator
+              │
+              ├─ Welcome section
+              │  ├─ Welcome heading
+              │  └─ Description
+              │
+              ├─ Device connection card
+              │  ├─ Connection information
+              │  ├─ Connection description
+              │  └─ Open Device page button
+              │
+              ├─ Device overview
+              │  ├─ Overview heading and status
+              │  ├─ Active mode card
+              │  ├─ Brightness card
+              │  ├─ Wi-Fi status card
+              │  ├─ Motion sensor card
+              │  └─ Brightness control
+              │     ├─ Brightness slider
+              │     └─ Apply brightness button
+              │
+              ├─ Animation modes
+              │  ├─ Animation section heading
+              │  ├─ Two-column animation grid
+              │  │  ├─ IDLE
+              │  │  ├─ SAND CLOCK
+              │  │  ├─ WATER
+              │  │  ├─ SAND GRAVITY
+              │  │  ├─ HEART
+              │  │  ├─ RAIN
+              │  │  └─ WAVES
+              │  └─ Dashboard status message
+              │
+              └─ Footer
+                 ├─ Application name
+                 └─ Application description
+
+        NOTES:
+        - Resource styles control animation highlighting.
+        - Animation selection is handled through TapGestureRecognizers.
+        - Dashboard values are populated through ViewModel bindings.
+        - ScrollView handles scrolling for the complete dashboard.
+    -->
+    
     <ContentPage.Resources>
         <ResourceDictionary>
 
