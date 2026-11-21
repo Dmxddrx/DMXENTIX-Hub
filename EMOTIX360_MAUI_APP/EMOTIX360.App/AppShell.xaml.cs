@@ -29,5 +29,17 @@ public partial class AppShell : Shell
             "my-devices",
             typeof(MyDevicesPage)
         );
+
+        // Register the actual My Devices collection page.
+        Routing.RegisterRoute(
+            "my-devices",
+            typeof(MyDevicesPage)
+        );
+
+        // Register the individual device workspace.
+        Routing.RegisterRoute(
+            "device-workspace",
+            typeof(DeviceWorkspacePage)
+        );
     }
 }

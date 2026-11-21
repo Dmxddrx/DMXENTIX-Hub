@@ -6,6 +6,7 @@ using EMOTIX360.App.Services.Bluetooth;
 using EMOTIX360.App.Services.Devices;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
+using System.Collections.Generic;
 
 namespace EMOTIX360.App.ViewModels;
 
@@ -34,6 +35,11 @@ public sealed class MyDevicesViewModel : ObservableObject
 
         ToggleFavoriteCommand = new Command<DeviceCardViewModel>(
             async card => await ToggleFavoriteAsync(card),
+            card => card is not null
+        );
+
+        OpenWorkspaceCommand = new Command<DeviceCardViewModel>(
+            async card => await OpenWorkspaceAsync(card),
             card => card is not null
         );
 
@@ -85,6 +91,8 @@ public sealed class MyDevicesViewModel : ObservableObject
     public Command RefreshCommand { get; }
 
     public Command<DeviceCardViewModel> ToggleFavoriteCommand { get; }
+
+    public Command<DeviceCardViewModel> OpenWorkspaceCommand { get; }
 
     // ========================================================
     // REFRESH STATE
@@ -288,5 +296,41 @@ public sealed class MyDevicesViewModel : ObservableObject
     private void OnSessionStateChanged(IDeviceSession session)
     {
         _ = RefreshAsync();
+    }
+
+    // ========================================================
+    // OPEN THE SELECTED DEVICE WORKSPACE
+    // ========================================================
+
+    private async Task OpenWorkspaceAsync(
+        DeviceCardViewModel? card)
+    {
+        if (card is null)
+            return;
+
+        Shell? shell = Shell.Current;
+
+        if (shell is null)
+            return;
+
+        try
+        {
+            await shell.GoToAsync(
+                "device-workspace",
+                new Dictionary<string, object>
+                {
+                    ["DeviceId"] = card.DeviceId
+                }
+            );
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[MyDevicesViewModel] Could not open workspace: {ex.Message}"
+            );
+
+            StatusMessage =
+                $"Could not open device workspace: {ex.Message}";
+        }
     }
 }

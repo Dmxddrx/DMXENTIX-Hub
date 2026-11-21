@@ -60,6 +60,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<HomeViewModel>();
         builder.Services.AddSingleton<DeviceViewModel>();
         builder.Services.AddSingleton<WifiProvisioningViewModel>();
+        // Individual device workspace.
+        builder.Services.AddTransient<DeviceWorkspaceViewModel>();
 
         // Pages are resolved by AppShell's DataTemplate factories.
         builder.Services.AddSingleton<DeviceHubPage>();
@@ -68,6 +70,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<DevicePage>();
         builder.Services.AddSingleton<SettingsPage>();
         builder.Services.AddSingleton<AppShell>();
+        builder.Services.AddTransient<DeviceWorkspacePage>();
 
 #if DEBUG
         builder.Logging.AddDebug();

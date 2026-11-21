@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<ContentPage
+    x:Class="EMOTIX360.App.Views.DeviceWorkspacePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="Device Workspace"
+    BackgroundColor="#0B111B"
+    Shell.NavBarIsVisible="False"
+    Shell.TabBarIsVisible="False">
+
+    <ScrollView>
+
+        <VerticalStackLayout
+            Padding="22,26,22,30"
+            Spacing="20">
+
+            <!-- ================================================= -->
+            <!-- NAVIGATION                                        -->
+            <!-- ================================================= -->
+
+            <Button
+                Text="BACK TO MY DEVICES"
+                Command="{Binding BackCommand}"
+                HorizontalOptions="Start"
+                BackgroundColor="#1A2E49"
+                TextColor="#9EC2FF"
+                FontAttributes="Bold"
+                FontSize="10"
+                Padding="14,9"
+                CornerRadius="10" />
+
+
+            <!-- ================================================= -->
+            <!-- HEADER                                            -->
+            <!-- ================================================= -->
+
+            <VerticalStackLayout Spacing="5">
+
+                <Label
+                    Text="DEVICE WORKSPACE"
+                    FontSize="11"
+                    CharacterSpacing="2"
+                    FontAttributes="Bold"
+                    TextColor="#5796FF" />
+
+                <Label
+                    Text="{Binding DisplayName}"
+                    FontSize="30"
+                    FontAttributes="Bold"
+                    TextColor="#F2F5FC" />
+
+                <Label
+                    Text="{Binding DeviceTypeText}"
+                    FontSize="11"
+                    CharacterSpacing="1"
+                    FontAttributes="Bold"
+                    TextColor="#78A8FF" />
+
+            </VerticalStackLayout>
+
+
+            <!-- ================================================= -->
+            <!-- CONNECTION STATUS                                 -->
+            <!-- ================================================= -->
+
+            <Border
+                BackgroundColor="#142135"
+                Stroke="#263C58"
+                StrokeThickness="1"
+                Padding="18">
+
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="17" />
+                </Border.StrokeShape>
+
+                <VerticalStackLayout Spacing="10">
+
+                    <Label
+                        Text="DEVICE CONNECTION"
+                        FontSize="11"
+                        CharacterSpacing="1.2"
+                        FontAttributes="Bold"
+                        TextColor="#91A4BF" />
+
+                    <Label
+                        Text="{Binding ConnectionStatusText}"
+                        FontSize="20"
+                        FontAttributes="Bold"
+                        TextColor="#F2F5FC" />
+
+                    <Label
+                        Text="{Binding StatusMessage}"
+                        FontSize="12"
+                        TextColor="#C0CCDD"
+                        LineBreakMode="WordWrap" />
+
+                </VerticalStackLayout>
+
+            </Border>
+
+
+            <!-- ================================================= -->
+            <!-- DEVICE INFORMATION                                -->
+            <!-- ================================================= -->
+
+            <Border
+                IsVisible="{Binding HasRecord}"
+                BackgroundColor="#121C2B"
+                Stroke="#26364A"
+                StrokeThickness="1"
+                Padding="17">
+
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="17" />
+                </Border.StrokeShape>
+
+                <VerticalStackLayout Spacing="13">
+
+                    <Label
+                        Text="DEVICE INFORMATION"
+                        FontSize="11"
+                        CharacterSpacing="1"
+                        FontAttributes="Bold"
+                        TextColor="#91A4BF" />
+
+                    <Grid ColumnDefinitions="*,Auto">
+
+                        <Label
+                            Text="Bluetooth name"
+                            FontSize="12"
+                            TextColor="#8999AF" />
+
+                        <Label
+                            Grid.Column="1"
+                            Text="{Binding AdvertisedName}"
+                            FontSize="12"
+                            FontAttributes="Bold"
+                            TextColor="#F2F5FC"
+                            HorizontalTextAlignment="End" />
+
+                    </Grid>
+
+                    <BoxView
+                        HeightRequest="1"
+                        Color="#26364A" />
+
+                    <Grid ColumnDefinitions="*,Auto">
+
+                        <Label
+                            Text="Last connected"
+                            FontSize="12"
+                            TextColor="#8999AF" />
+
+                        <Label
+                            Grid.Column="1"
+                            Text="{Binding LastConnectedText}"
+                            FontSize="12"
+                            FontAttributes="Bold"
+                            TextColor="#F2F5FC"
+                            HorizontalTextAlignment="End" />
+
+                    </Grid>
+
+                    <BoxView
+                        HeightRequest="1"
+                        Color="#26364A" />
+
+                    <Label
+                        Text="Registry ID"
+                        FontSize="11"
+                        TextColor="#8999AF" />
+
+                    <Label
+                        Text="{Binding RegistryDeviceIdText}"
+                        FontSize="10"
+                        TextColor="#B4C2D5"
+                        LineBreakMode="CharacterWrap" />
+
+                    <Label
+                        Text="Bluetooth transport ID"
+                        FontSize="11"
+                        TextColor="#8999AF" />
+
+                    <Label
+                        Text="{Binding BluetoothDeviceIdText}"
+                        FontSize="10"
+                        TextColor="#B4C2D5"
+                        LineBreakMode="CharacterWrap" />
+
+                </VerticalStackLayout>
+
+            </Border>
+
+
+            <!-- ================================================= -->
+            <!-- WORKSPACE CONTENT                                 -->
+            <!-- ================================================= -->
+
+            <Border
+                BackgroundColor="#142135"
+                Stroke="#263C58"
+                StrokeThickness="1"
+                Padding="18">
+
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="17" />
+                </Border.StrokeShape>
+
+                <VerticalStackLayout Spacing="10">
+
+                    <Label
+                        Text="WORKSPACE"
+                        FontSize="11"
+                        CharacterSpacing="1.2"
+                        FontAttributes="Bold"
+                        TextColor="#91A4BF" />
+
+                    <Label
+                        Text="{Binding WorkspaceMessage}"
+                        FontSize="13"
+                        TextColor="#C0CCDD"
+                        LineBreakMode="WordWrap" />
+
+                </VerticalStackLayout>
+
+            </Border>
+
+
+            <!-- ================================================= -->
+            <!-- FOOTER                                            -->
+            <!-- ================================================= -->
+
+            <Label
+                Text="This workspace is associated with the selected saved device."
+                FontSize="11"
+                TextColor="#677B94"
+                HorizontalTextAlignment="Center" />
+
+        </VerticalStackLayout>
+
+    </ScrollView>
+
+</ContentPage>
