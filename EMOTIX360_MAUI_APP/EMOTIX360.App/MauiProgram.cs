@@ -55,11 +55,13 @@ public static class MauiProgram
         builder.Services.AddSingleton<DeviceRegistryService>();
 
         // Shared view-model state is retained while navigating between tabs.
+        builder.Services.AddSingleton<DeviceHubViewModel>();
         builder.Services.AddSingleton<HomeViewModel>();
         builder.Services.AddSingleton<DeviceViewModel>();
         builder.Services.AddSingleton<WifiProvisioningViewModel>();
 
         // Pages are resolved by AppShell's DataTemplate factories.
+        builder.Services.AddSingleton<DeviceHubPage>();
         builder.Services.AddSingleton<HomePage>();
         builder.Services.AddSingleton<DevicePage>();
         builder.Services.AddSingleton<SettingsPage>();

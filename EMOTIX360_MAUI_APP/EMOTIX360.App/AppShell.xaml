@@ -9,6 +9,12 @@
     Shell.TabBarIsVisible="True">
 
     <TabBar>
+
+        <ShellContent
+            x:Name="DevicesShellContent"
+            Title="Devices"
+            Route="devices" />
+
         <ShellContent
             x:Name="HomeShellContent"
             Title="Home"
@@ -23,6 +29,7 @@
             x:Name="SettingsShellContent"
             Title="Settings"
             Route="settings" />
+
     </TabBar>
 
 </Shell>

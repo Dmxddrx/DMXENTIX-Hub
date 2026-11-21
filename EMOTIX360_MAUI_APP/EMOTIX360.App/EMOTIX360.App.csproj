@@ -30,6 +30,9 @@
     <MauiXaml Update="Views\DevicePage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </MauiXaml>
+    <MauiXaml Update="Views\DeviceHubPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </MauiXaml>
     <MauiXaml Update="Views\HomePage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </MauiXaml>
@@ -42,6 +45,12 @@
   <ItemGroup>
     <Folder Include="Resources\Images\" />
     <Folder Include="Resources\Fonts\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Views\DeviceHubPage.xaml.cs">
+      <DependentUpon>DeviceHubPage.xaml</DependentUpon>
+    </Compile>
   </ItemGroup>
 
 </Project>
