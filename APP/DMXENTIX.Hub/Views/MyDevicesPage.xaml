@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<ContentPage
+    x:Class="DMXENTIX.Hub.Views.MyDevicesPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="My Devices"
+    BackgroundColor="#0B111B">
+
+    <ScrollView>
+
+        <VerticalStackLayout
+            Padding="22,26,22,30"
+            Spacing="20">
+
+            <!-- ================================================= -->
+            <!-- HEADER                                            -->
+            <!-- ================================================= -->
+
+            <VerticalStackLayout Spacing="5">
+
+                <Label
+                    Text="DEVICE COLLECTION"
+                    FontSize="11"
+                    CharacterSpacing="2"
+                    FontAttributes="Bold"
+                    TextColor="#5796FF" />
+
+                <Label
+                    Text="My Devices"
+                    FontSize="32"
+                    FontAttributes="Bold"
+                    TextColor="#F2F5FC" />
+
+                <Label
+                    Text="Your saved devices and their connection status."
+                    FontSize="13"
+                    TextColor="#8999AF" />
+
+            </VerticalStackLayout>
+
+
+            <!-- ================================================= -->
+            <!-- COLLECTION SUMMARY                                -->
+            <!-- ================================================= -->
+
+            <Border
+                BackgroundColor="#142135"
+                Stroke="#263C58"
+                StrokeThickness="1"
+                Padding="16">
+
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="16" />
+                </Border.StrokeShape>
+
+                <Grid ColumnDefinitions="*,Auto">
+
+                    <VerticalStackLayout Spacing="5">
+
+                        <Label
+                            Text="{Binding DeviceCountText}"
+                            FontSize="12"
+                            CharacterSpacing="1"
+                            FontAttributes="Bold"
+                            TextColor="#91A4BF" />
+
+                        <Label
+                            Text="{Binding StatusMessage}"
+                            FontSize="12"
+                            TextColor="#C0CCDD"
+                            LineBreakMode="WordWrap" />
+
+                    </VerticalStackLayout>
+
+                    <Button
+                        Grid.Column="1"
+                        Text="REFRESH"
+                        Command="{Binding RefreshCommand}"
+                        IsEnabled="{Binding CanRefresh}"
+                        BackgroundColor="#1A2E49"
+                        TextColor="#9EC2FF"
+                        FontAttributes="Bold"
+                        FontSize="10"
+                        Padding="12,9"
+                        CornerRadius="10"
+                        VerticalOptions="Center" />
+
+                </Grid>
+
+            </Border>
+
+
+            <!-- ================================================= -->
+            <!-- SAVED DEVICES                                     -->
+            <!-- ================================================= -->
+
+            <VerticalStackLayout Spacing="12">
+
+                <Label
+                    Text="SAVED DEVICES"
+                    FontSize="12"
+                    CharacterSpacing="1"
+                    FontAttributes="Bold"
+                    TextColor="#DFE7F3" />
+
+                <Label
+                    Text="No saved devices yet. Connect a supported device from Device Hub to add it here."
+                    IsVisible="{Binding HasNoDevices}"
+                    FontSize="12"
+                    TextColor="#8999AF"
+                    LineBreakMode="WordWrap" />
+
+                <VerticalStackLayout
+                    BindableLayout.ItemsSource="{Binding Devices}"
+                    Spacing="12">
+
+                    <BindableLayout.ItemTemplate>
+
+                        <DataTemplate>
+
+                            <Border
+                                BackgroundColor="#121C2B"
+                                Stroke="#26364A"
+                                StrokeThickness="1"
+                                Padding="16">
+
+                                <Border.StrokeShape>
+                                    <RoundRectangle CornerRadius="16" />
+                                </Border.StrokeShape>
+
+                                <VerticalStackLayout Spacing="12">
+
+                                    <!-- DEVICE NAME AND STATUS -->
+
+                                    <Grid
+                                        ColumnDefinitions="*,Auto"
+                                        ColumnSpacing="10">
+
+                                        <VerticalStackLayout Spacing="5">
+
+                                            <Label
+                                                Text="{Binding DisplayName}"
+                                                FontSize="17"
+                                                FontAttributes="Bold"
+                                                TextColor="#F2F5FC" />
+
+                                            <Label
+                                                Text="{Binding DeviceTypeText}"
+                                                FontSize="10"
+                                                CharacterSpacing="1"
+                                                FontAttributes="Bold"
+                                                TextColor="#78A8FF" />
+
+                                        </VerticalStackLayout>
+
+                                        <VerticalStackLayout
+                                            Grid.Column="1"
+                                            Spacing="7"
+                                            HorizontalOptions="End"
+                                            VerticalOptions="Center">
+
+                                            <Label
+                                                Text="{Binding ConnectionStatusText}"
+                                                FontSize="10"
+                                                FontAttributes="Bold"
+                                                TextColor="{Binding ConnectionStatusColor}"
+                                                HorizontalTextAlignment="End" />
+
+                                            <Button
+                                                Text="{Binding FavoriteButtonText}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type ContentPage}}, Path=BindingContext.ToggleFavoriteCommand}"
+                                                CommandParameter="{Binding .}"
+                                                BackgroundColor="#1A2E49"
+                                                TextColor="#9EC2FF"
+                                                FontSize="9"
+                                                FontAttributes="Bold"
+                                                Padding="10,6"
+                                                CornerRadius="9" />
+
+                                        </VerticalStackLayout>
+
+                                    </Grid>
+
+
+                                    <!-- BLUETOOTH NAME -->
+
+                                    <Label
+                                        Text="{Binding AdvertisedName}"
+                                        FontSize="12"
+                                        TextColor="#8999AF" />
+
+
+                                    <!-- PRODUCT CAPABILITIES -->
+
+                                    <Border
+                                        BackgroundColor="#192638"
+                                        StrokeThickness="0"
+                                        Padding="11">
+
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="10" />
+                                        </Border.StrokeShape>
+
+                                        <Label
+                                            Text="{Binding ProductSummary}"
+                                            FontSize="11"
+                                            TextColor="#B4C2D5"
+                                            LineBreakMode="WordWrap" />
+
+                                    </Border>
+
+
+                                    <!-- CONNECTION HISTORY -->
+
+                                    <VerticalStackLayout Spacing="5">
+
+                                        <Label
+                                            Text="{Binding LastConnectedText}"
+                                            FontSize="11"
+                                            TextColor="#A0AEC0" />
+
+                                        <Label
+                                            Text="{Binding FirmwareInfoText}"
+                                            IsVisible="{Binding HasFirmwareInfo}"
+                                            FontSize="10"
+                                            TextColor="#7789A3" />
+                                        
+                                        <!-- ================================================= -->
+                                        <!-- OPEN DEVICE WORKSPACE                             -->
+                                        <!-- ================================================= -->
+
+                                        <Button
+                                            Text="OPEN WORKSPACE"
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type ContentPage}}, Path=BindingContext.OpenWorkspaceCommand}"
+                                            CommandParameter="{Binding .}"
+                                            BackgroundColor="#397FE8"
+                                            TextColor="White"
+                                            FontAttributes="Bold"
+                                            CharacterSpacing="0.8"
+                                            FontSize="11"
+                                            HeightRequest="43"
+                                            CornerRadius="11" />
+
+                                    </VerticalStackLayout>
+
+                                </VerticalStackLayout>
+
+                            </Border>
+
+                        </DataTemplate>
+
+                    </BindableLayout.ItemTemplate>
+
+                </VerticalStackLayout>
+
+            </VerticalStackLayout>
+
+
+            <!-- ================================================= -->
+            <!-- FOOTER                                            -->
+            <!-- ================================================= -->
+
+            <Label
+                Text="Connection status is based on the current Bluetooth sessions. Saved device information is stored locally."
+                FontSize="11"
+                TextColor="#677B94"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap" />
+
+        </VerticalStackLayout>
+
+    </ScrollView>
+
+</ContentPage>
