@@ -6,6 +6,7 @@ using EMOTIX360.App.Models;
 using EMOTIX360.App.Services;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
+using EMOTIX360.App.Services.Bluetooth;
 
 namespace EMOTIX360.App.ViewModels
 {
@@ -65,14 +66,19 @@ namespace EMOTIX360.App.ViewModels
             );
 
             _bluetooth.ConnectionChanged += OnConnectionChanged;
+            _bluetooth.ActiveSessionChanged += OnActiveSessionChanged;
+
             _provisioning.StatusUpdated += OnStatusUpdated;
+            _provisioning.StatusCleared += OnStatusCleared;
 
             IsConnected = _bluetooth.IsConnected;
 
-            if (_provisioning.CurrentStatus is not null)
-            {
-                ApplyDeviceStatus(_provisioning.CurrentStatus);
-            }
+            _provisioning.SetSession(_bluetooth.ActiveSession);
+        }
+
+        private void OnActiveSessionChanged(IDeviceSession? session)
+        {
+            _provisioning.SetSession(session);
         }
 
         // --------------------------------------------------------
@@ -287,8 +293,14 @@ namespace EMOTIX360.App.ViewModels
 
         private async Task SendCredentialsAsync()
         {
-            if (!CanSendCredentials)
+            IDeviceSession? session = _bluetooth.ActiveSession;
+
+            if (!CanSendCredentials ||
+                session is null ||
+                !session.IsConnected)
+            {
                 return;
+            }
 
             IsBusy = true;
 
@@ -300,6 +312,7 @@ namespace EMOTIX360.App.ViewModels
             try
             {
                 await _provisioning.SendCredentialsAsync(
+                    session,
                     Ssid,
                     Password
                 );
@@ -331,8 +344,14 @@ namespace EMOTIX360.App.ViewModels
 
         private async Task ClearStoredNetworksAsync()
         {
-            if (!CanClearStoredNetworks)
+            IDeviceSession? session = _bluetooth.ActiveSession;
+
+            if (!CanClearStoredNetworks ||
+                session is null ||
+                !session.IsConnected)
+            {
                 return;
+            }
 
             Shell? shell = Shell.Current;
 
@@ -362,7 +381,7 @@ namespace EMOTIX360.App.ViewModels
 
             try
             {
-                await _provisioning.ClearStoredNetworksAsync();
+                await _provisioning.ClearStoredNetworksAsync(session);
 
                 if (_waitingForDeviceResult)
                 {
@@ -386,6 +405,21 @@ namespace EMOTIX360.App.ViewModels
         // ========================================================
         // HANDLE DEVICE STATUS
         // ========================================================
+
+        private void OnStatusCleared()
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                _waitingForDeviceResult = false;
+
+                HasDeviceStatus = false;
+                StoredNetworkCount = 0;
+
+                StatusMessage = IsConnected
+                    ? "Connected. Reading device Wi-Fi status..."
+                    : "Connect to EMOTIX360 to configure Wi-Fi.";
+            });
+        }
 
         private void OnStatusUpdated(WifiProvisioningStatus status)
         {

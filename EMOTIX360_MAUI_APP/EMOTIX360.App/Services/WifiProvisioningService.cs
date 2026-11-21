@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using EMOTIX360.App.Models;
+using EMOTIX360.App.Services.Bluetooth;
 
 namespace EMOTIX360.App.Services
 {
-    public sealed class WifiProvisioningService
+    public sealed class WifiProvisioningService : IDisposable
     {
         private const int MaximumFrameLength = 20;
         private const int MaximumChunkLength = 12;
@@ -13,26 +16,59 @@ namespace EMOTIX360.App.Services
         private const int MaximumSsidBytes = 32;
         private const int MaximumPasswordBytes = 63;
 
-        private readonly BluetoothService _bluetooth;
+        private IDeviceSession? _session;
 
         private static readonly UTF8Encoding StrictUtf8 =
             new(false, true);
 
-        public WifiProvisioningService(BluetoothService bluetooth)
+        public WifiProvisioningService()
         {
-            _bluetooth = bluetooth;
+        }
 
-            _bluetooth.WifiProvisioningStatusPayloadReceived +=
+        // --------------------------------------------------------
+        // SELECT DEVICE SESSION
+        // --------------------------------------------------------
+
+        public void SetSession(IDeviceSession? session)
+        {
+            if (ReferenceEquals(_session, session))
+                return;
+
+            // Remove subscriptions from the previous session.
+            if (_session is not null)
+            {
+                _session.ProvisioningStatusPayloadReceived -=
+                    OnWifiProvisioningStatusReceived;
+
+                _session.StateChanged -=
+                    OnSessionStateChanged;
+            }
+
+            _session = session;
+
+            // Do not retain another device's provisioning status.
+            CurrentStatus = null;
+            StatusCleared?.Invoke();
+
+            if (_session is null)
+                return;
+
+            // Subscribe directly to the selected session.
+            _session.ProvisioningStatusPayloadReceived +=
                 OnWifiProvisioningStatusReceived;
 
-            _bluetooth.ConnectionChanged +=
-                OnBluetoothConnectionChanged;
+            _session.StateChanged +=
+                OnSessionStateChanged;
 
-            // Recover the latest status if BLE connected before
-            // this service was created.
-            if (_bluetooth.CurrentWifiProvisioningStatusPayload is string payload)
+            // Recover the latest status if this session was
+            // already connected before it was selected.
+            if (_session.IsConnected &&
+                !string.IsNullOrWhiteSpace(
+                    _session.LastProvisioningStatusPayload))
             {
-                OnWifiProvisioningStatusReceived(payload);
+                ProcessProvisioningStatus(
+                    _session.LastProvisioningStatusPayload
+                );
             }
         }
 
@@ -40,21 +76,19 @@ namespace EMOTIX360.App.Services
 
         public event Action<WifiProvisioningStatus>? StatusUpdated;
 
+        public event Action? StatusCleared;
+
         // --------------------------------------------------------
         // SEND WIFI CREDENTIALS
         // --------------------------------------------------------
 
         public async Task SendCredentialsAsync(
+            IDeviceSession session,
             string ssid,
             string password,
             CancellationToken cancellationToken = default)
         {
-            if (!_bluetooth.IsConnected)
-            {
-                throw new InvalidOperationException(
-                    "Connect to EMOTIX360 before sending Wi-Fi credentials."
-                );
-            }
+            EnsureSelectedConnectedSession(session);
 
             if (string.IsNullOrEmpty(ssid))
             {
@@ -104,6 +138,7 @@ namespace EMOTIX360.App.Services
             // ----------------------------------------------------
 
             await SendFrameAsync(
+                session,
                 $"B,{ssidBytes.Length},{passwordBytes.Length}," +
                 $"{ssidChunks.Length},{passwordChunks.Length}",
                 cancellationToken
@@ -116,6 +151,7 @@ namespace EMOTIX360.App.Services
             for (int i = 0; i < ssidChunks.Length; i++)
             {
                 await SendFrameAsync(
+                    session,
                     $"S,{i}/{ssidChunks.Length},{ssidChunks[i]}",
                     cancellationToken
                 );
@@ -128,6 +164,7 @@ namespace EMOTIX360.App.Services
             for (int i = 0; i < passwordChunks.Length; i++)
             {
                 await SendFrameAsync(
+                    session,
                     $"P,{i}/{passwordChunks.Length},{passwordChunks[i]}",
                     cancellationToken
                 );
@@ -138,6 +175,7 @@ namespace EMOTIX360.App.Services
             // ----------------------------------------------------
 
             await SendFrameAsync(
+                session,
                 "COMMIT",
                 cancellationToken
             );
@@ -148,19 +186,41 @@ namespace EMOTIX360.App.Services
         // --------------------------------------------------------
 
         public async Task ClearStoredNetworksAsync(
+            IDeviceSession session,
             CancellationToken cancellationToken = default)
         {
-            if (!_bluetooth.IsConnected)
-            {
-                throw new InvalidOperationException(
-                    "Connect to EMOTIX360 before clearing stored networks."
-                );
-            }
+            EnsureSelectedConnectedSession(session);
 
             await SendFrameAsync(
+                session,
                 "CLEAR",
                 cancellationToken
             );
+        }
+
+        // --------------------------------------------------------
+        // VALIDATE SELECTED SESSION
+        // --------------------------------------------------------
+
+        private void EnsureSelectedConnectedSession(
+            IDeviceSession session)
+        {
+            ArgumentNullException.ThrowIfNull(session);
+
+            if (!session.IsConnected)
+            {
+                throw new InvalidOperationException(
+                    "Connect to EMOTIX360 before sending Wi-Fi credentials."
+                );
+            }
+
+            if (!ReferenceEquals(session, _session))
+            {
+                throw new InvalidOperationException(
+                    "The selected device session has changed. " +
+                    "Select the device again before provisioning Wi-Fi."
+                );
+            }
         }
 
         // --------------------------------------------------------
@@ -168,10 +228,14 @@ namespace EMOTIX360.App.Services
         // --------------------------------------------------------
 
         private async Task SendFrameAsync(
+            IDeviceSession session,
             string frame,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Check the selected session again before every frame.
+            EnsureSelectedConnectedSession(session);
 
             if (Encoding.ASCII.GetByteCount(frame) > MaximumFrameLength)
             {
@@ -180,7 +244,10 @@ namespace EMOTIX360.App.Services
                 );
             }
 
-            await _bluetooth.WriteWifiProvisioningFrameAsync(frame);
+            await session.WriteWifiProvisioningFrameAsync(
+                frame,
+                cancellationToken
+            );
         }
 
         // --------------------------------------------------------
@@ -217,7 +284,18 @@ namespace EMOTIX360.App.Services
         // HANDLE DEVICE STATUS NOTIFICATIONS
         // --------------------------------------------------------
 
-        private void OnWifiProvisioningStatusReceived(string payload)
+        private void OnWifiProvisioningStatusReceived(
+            IDeviceSession session,
+            string payload)
+        {
+            // Ignore notifications from sessions that are no longer selected.
+            if (!ReferenceEquals(session, _session))
+                return;
+
+            ProcessProvisioningStatus(payload);
+        }
+
+        private void ProcessProvisioningStatus(string payload)
         {
             if (!WifiProvisioningStatus.TryParse(
                     payload,
@@ -230,19 +308,50 @@ namespace EMOTIX360.App.Services
 
             StatusUpdated?.Invoke(status);
         }
+
         // --------------------------------------------------------
-        // HANDLE BLE CONNECTION CHANGES
+        // HANDLE SESSION CONNECTION CHANGES
         // --------------------------------------------------------
 
-        private void OnBluetoothConnectionChanged(
-            bool connected,
-            string? detail)
+        private void OnSessionStateChanged(IDeviceSession session)
         {
-            if (connected)
+            if (!ReferenceEquals(session, _session))
                 return;
 
-            // Do not retain a previous device's provisioning status.
-            CurrentStatus = null;
+            if (!session.IsConnected)
+            {
+                CurrentStatus = null;
+                StatusCleared?.Invoke();
+
+                return;
+            }
+
+            // Restore the latest status after reconnection.
+            if (!string.IsNullOrWhiteSpace(
+                    session.LastProvisioningStatusPayload))
+            {
+                ProcessProvisioningStatus(
+                    session.LastProvisioningStatusPayload
+                );
+            }
+        }
+
+        // --------------------------------------------------------
+        // DISPOSE
+        // --------------------------------------------------------
+
+        public void Dispose()
+        {
+            if (_session is not null)
+            {
+                _session.ProvisioningStatusPayloadReceived -=
+                    OnWifiProvisioningStatusReceived;
+
+                _session.StateChanged -=
+                    OnSessionStateChanged;
+
+                _session = null;
+            }
         }
     }
 }
