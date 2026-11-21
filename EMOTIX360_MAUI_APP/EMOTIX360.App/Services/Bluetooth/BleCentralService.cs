@@ -42,6 +42,7 @@ public sealed class BleCentralService
 
     public event Action<bool>? BluetoothPowerStateChanged;
 
+
     private readonly object _devicesLock = new();
     private readonly Dictionary<Guid, IDevice> _discoveredDevices = new();
 
@@ -74,13 +75,24 @@ public sealed class BleCentralService
             $"[BleCentral] Bluetooth state changed: {args.NewState}"
         );
 
-        if (args.NewState == BluetoothState.On)
+        if (args.NewState == BluetoothState.Off)
+        {
+            // Discovered peripheral references are no longer valid
+            // for a future connection after the adapter is disabled.
+            lock (_devicesLock)
+            {
+                _discoveredDevices.Clear();
+            }
+
+            Debug.WriteLine(
+                "[BleCentral] Discovered peripheral cache cleared."
+            );
+
+            BluetoothPowerStateChanged?.Invoke(false);
+        }
+        else if (args.NewState == BluetoothState.On)
         {
             BluetoothPowerStateChanged?.Invoke(true);
-        }
-        else if (args.NewState == BluetoothState.Off)
-        {
-            BluetoothPowerStateChanged?.Invoke(false);
         }
     }
 

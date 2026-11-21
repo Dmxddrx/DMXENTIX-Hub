@@ -49,6 +49,14 @@ public interface IDeviceSession : IAsyncDisposable
         CancellationToken cancellationToken = default
     );
 
+    Task ConnectKnownDeviceAsync(
+        CancellationToken cancellationToken = default
+    );
+
+    Task HandleBluetoothUnavailableAsync(
+        CancellationToken cancellationToken = default
+    );
+
     /// <summary>
     /// Disconnects only this session's physical BLE peripheral.
     /// </summary>

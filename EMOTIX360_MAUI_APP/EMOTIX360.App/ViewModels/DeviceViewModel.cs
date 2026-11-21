@@ -39,22 +39,28 @@ public sealed class DeviceViewModel : ObservableObject
             OnPropertyChanged(nameof(ConnectionText));
             OnPropertyChanged(nameof(ScanButtonText));
 
-            RefreshCommandStates();
+            if (!isOn)
+            {
+                // Immediately remove the old connection indication.
+                IsConnected = false;
 
-            if (IsConnected)
-                return;
+                // Old scan results must not remain selectable.
+                Devices.Clear();
 
-            if (isOn)
+                SelectedDevice = null;
+
+                StatusMessage =
+                    "Bluetooth is off. Tap TURN ON BLUETOOTH to continue.";
+            }
+            else
             {
                 StatusMessage =
                     "Bluetooth is on. Searching automatically for EMOTIX360...";
             }
-            else
-            {
-                StatusMessage = OperatingSystem.IsAndroid()
-                    ? "Bluetooth is off. Tap TURN ON BLUETOOTH to continue."
-                    : "Bluetooth is off. Turn it on in your device Settings.";
-            }
+
+            IsAutoConnecting = _bluetooth.IsAutoConnecting;
+
+            RefreshCommandStates();
         });
     }
 
@@ -574,9 +580,11 @@ public sealed class DeviceViewModel : ObservableObject
             IsAutoConnecting =
                 _bluetooth.IsAutoConnecting;
 
-            StatusMessage = connected
-                ? $"Connected to {detail ?? BluetoothService.DeviceName}."
-                : detail ?? "Device disconnected.";
+            StatusMessage = !_bluetooth.IsBluetoothOn
+                ? "Bluetooth is off. Tap TURN ON BLUETOOTH to continue."
+                : connected
+                    ? $"Connected to {detail ?? BluetoothService.DeviceName}."
+                    : detail ?? "Device disconnected.";
         });
     }
 

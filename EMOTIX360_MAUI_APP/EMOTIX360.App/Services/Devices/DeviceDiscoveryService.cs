@@ -44,11 +44,36 @@ public sealed class DeviceDiscoveryService
         // Maintain discovery results for each scan.
         _bleCentral.ScanStarting += OnScanStarting;
         _bleCentral.ScanCompleted += OnScanCompleted;
+
+        _bleCentral.BluetoothPowerStateChanged +=
+            OnBluetoothPowerStateChanged;
     }
 
     public event Action<DiscoveredDeviceInfo>? DeviceDiscovered;
 
     public event Action? DevicesChanged;
+
+
+    // ========================================================
+    // HANDLE BLUETOOTH POWER CHANGES
+    // ========================================================
+
+    private void OnBluetoothPowerStateChanged(bool isOn)
+    {
+        if (isOn)
+            return;
+
+        lock (_devicesLock)
+        {
+            _discoveredDevices.Clear();
+        }
+
+        Debug.WriteLine(
+            "[DeviceDiscovery] Discovery cache cleared because Bluetooth is OFF."
+        );
+
+        DevicesChanged?.Invoke();
+    }
 
     /// <summary>
     /// Returns a snapshot of currently discovered supported products.

@@ -1,7 +1,9 @@
 ﻿using EMOTIX360.App.Models.Devices;
 using EMOTIX360.App.Services.Devices;
 using Plugin.BLE.Abstractions.Contracts;
-using AppDeviceType = global::EMOTIX360.App.Models.Devices.DeviceType;
+
+using AppDeviceType =
+    global::EMOTIX360.App.Models.Devices.DeviceType;
 
 namespace EMOTIX360.App.Services.Bluetooth;
 
@@ -9,7 +11,7 @@ namespace EMOTIX360.App.Services.Bluetooth;
 /// Manages independent BLE device sessions.
 ///
 /// BleCentralService owns the shared adapter and scanner.
-/// BleConnectionManager owns the collection of device sessions.
+/// BleConnectionManager owns the collection of sessions.
 /// BleDeviceSession owns each individual GATT connection.
 /// </summary>
 public sealed class BleConnectionManager : IAsyncDisposable
@@ -42,6 +44,34 @@ public sealed class BleConnectionManager : IAsyncDisposable
     }
 
     // ========================================================
+    // HANDLE BLUETOOTH ADAPTER UNAVAILABLE
+    // ========================================================
+
+    public async Task HandleBluetoothUnavailableAsync(
+        CancellationToken cancellationToken = default)
+    {
+        IDeviceSession[] activeSessions = Sessions
+            .Where(session =>
+                session.ConnectionState != DeviceConnectionState.Disconnected &&
+                session.ConnectionState != DeviceConnectionState.Discovered)
+            .ToArray();
+
+        Debug.WriteLine(
+            $"[BleConnectionManager] Bluetooth unavailable. " +
+            $"Invalidating {activeSessions.Length} active session(s)."
+        );
+
+        foreach (IDeviceSession session in activeSessions)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await session.HandleBluetoothUnavailableAsync(
+                cancellationToken
+            );
+        }
+    }
+
+    // ========================================================
     // SESSION SNAPSHOTS
     // ========================================================
 
@@ -67,7 +97,9 @@ public sealed class BleConnectionManager : IAsyncDisposable
     {
         lock (_syncLock)
         {
-            if (_sessions.TryGetValue(deviceId, out BleDeviceSession? found))
+            if (_sessions.TryGetValue(
+                    deviceId,
+                    out BleDeviceSession? found))
             {
                 session = found;
                 return true;
@@ -96,7 +128,7 @@ public sealed class BleConnectionManager : IAsyncDisposable
     public event Action<IDeviceSession>? SessionStateChanged;
 
     // ========================================================
-    // CONNECT
+    // CONNECT DISCOVERED DEVICE
     // ========================================================
 
     public async Task<IDeviceSession> ConnectAsync(
@@ -105,62 +137,87 @@ public sealed class BleConnectionManager : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        // Prevent two simultaneous connection attempts to the same device.
-        // Different device IDs receive different semaphores.
-        SemaphoreSlim connectionLock;
+        DiscoveredDeviceInfo? discovered =
+            _discovery.DiscoveredDevices.FirstOrDefault(
+                device => device.Id == deviceId
+            );
 
-        lock (_syncLock)
+        if (discovered is null)
         {
-            if (!_connectionLocks.TryGetValue(
-                    deviceId,
-                    out connectionLock!))
-            {
-                connectionLock = new SemaphoreSlim(1, 1);
-
-                _connectionLocks.Add(
-                    deviceId,
-                    connectionLock
-                );
-            }
+            throw new InvalidOperationException(
+                "The selected device is no longer in discovery results. Scan again."
+            );
         }
+
+        if (!_bleCentral.TryGetDiscoveredDevice(
+                deviceId,
+                out IDevice? device) ||
+            device is null)
+        {
+            throw new InvalidOperationException(
+                "The BLE peripheral is no longer available. Scan again."
+            );
+        }
+
+        return await ConnectCoreAsync(
+            deviceId,
+            discovered.DeviceType,
+            discovered.ProductName,
+            (session, token) => session.ConnectAsync(device, token),
+            cancellationToken
+        );
+    }
+
+    // ========================================================
+    // CONNECT REMEMBERED DEVICE
+    // ========================================================
+
+    public async Task<IDeviceSession> ConnectKnownDeviceAsync(
+        Guid deviceId,
+        AppDeviceType deviceType,
+        string productName,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        return await ConnectCoreAsync(
+            deviceId,
+            deviceType,
+            productName,
+            (session, token) => session.ConnectKnownDeviceAsync(token),
+            cancellationToken
+        );
+    }
+
+    // ========================================================
+    // COMMON SESSION CONNECTION
+    // ========================================================
+
+    private async Task<IDeviceSession> ConnectCoreAsync(
+        Guid deviceId,
+        AppDeviceType deviceType,
+        string productName,
+        Func<BleDeviceSession, CancellationToken, Task> connectOperation,
+        CancellationToken cancellationToken)
+    {
+        SemaphoreSlim connectionLock = GetConnectionLock(deviceId);
 
         await connectionLock.WaitAsync(cancellationToken);
 
         try
         {
-            DiscoveredDeviceInfo? discovered =
-                _discovery.DiscoveredDevices.FirstOrDefault(
-                    device => device.Id == deviceId
-                );
-
-            if (discovered is null)
-            {
-                throw new InvalidOperationException(
-                    "The selected device is no longer in discovery results. Scan again."
-                );
-            }
-
-            if (!_bleCentral.TryGetDiscoveredDevice(
-                    deviceId,
-                    out IDevice? device) ||
-                device is null)
-            {
-                throw new InvalidOperationException(
-                    "The BLE peripheral is no longer available. Scan again."
-                );
-            }
+            ObjectDisposedException.ThrowIf(_disposed, this);
 
             if (!_protocols.TryGetValue(
-                    discovered.DeviceType,
+                    deviceType,
                     out IDeviceProtocol? protocol))
             {
                 throw new NotSupportedException(
-                    $"No BLE protocol is registered for {discovered.DeviceType}."
+                    $"No BLE protocol is registered for {deviceType}."
                 );
             }
 
             BleDeviceSession session;
-
             bool added = false;
 
             lock (_syncLock)
@@ -169,14 +226,21 @@ public sealed class BleConnectionManager : IAsyncDisposable
                         deviceId,
                         out BleDeviceSession? existing))
                 {
+                    if (existing.DeviceType != deviceType)
+                    {
+                        throw new InvalidOperationException(
+                            "The existing session belongs to a different product type."
+                        );
+                    }
+
                     session = existing;
                 }
                 else
                 {
                     session = new BleDeviceSession(
                         deviceId,
-                        discovered.DeviceType,
-                        discovered.ProductName,
+                        deviceType,
+                        productName,
                         _bleCentral.Adapter,
                         protocol
                     );
@@ -189,13 +253,16 @@ public sealed class BleConnectionManager : IAsyncDisposable
                 }
             }
 
+            // Notify subscribers before connecting.
+            // This allows the compatibility facade to observe
+            // the session before its first notification arrives.
             if (added)
             {
                 SessionAdded?.Invoke(session);
             }
 
-            await session.ConnectAsync(
-                device,
+            await connectOperation(
+                session,
                 cancellationToken
             );
 
@@ -204,6 +271,30 @@ public sealed class BleConnectionManager : IAsyncDisposable
         finally
         {
             connectionLock.Release();
+        }
+    }
+
+    // ========================================================
+    // PER-DEVICE CONNECTION LOCK
+    // ========================================================
+
+    private SemaphoreSlim GetConnectionLock(Guid deviceId)
+    {
+        lock (_syncLock)
+        {
+            if (!_connectionLocks.TryGetValue(
+                    deviceId,
+                    out SemaphoreSlim? connectionLock))
+            {
+                connectionLock = new SemaphoreSlim(1, 1);
+
+                _connectionLocks.Add(
+                    deviceId,
+                    connectionLock
+                );
+            }
+
+            return connectionLock;
         }
     }
 
@@ -246,22 +337,33 @@ public sealed class BleConnectionManager : IAsyncDisposable
 
     public async Task RemoveSessionAsync(Guid deviceId)
     {
-        BleDeviceSession? session;
+        SemaphoreSlim connectionLock = GetConnectionLock(deviceId);
 
-        lock (_syncLock)
+        await connectionLock.WaitAsync();
+
+        try
         {
-            if (!_sessions.TryGetValue(deviceId, out session))
-                return;
+            BleDeviceSession? session;
+
+            lock (_syncLock)
+            {
+                if (!_sessions.TryGetValue(deviceId, out session))
+                    return;
+            }
+
+            await session.DisposeAsync();
+
+            lock (_syncLock)
+            {
+                _sessions.Remove(deviceId);
+            }
+
+            SessionRemoved?.Invoke(session);
         }
-
-        await session.DisposeAsync();
-
-        lock (_syncLock)
+        finally
         {
-            _sessions.Remove(deviceId);
+            connectionLock.Release();
         }
-
-        SessionRemoved?.Invoke(session);
     }
 
     // ========================================================

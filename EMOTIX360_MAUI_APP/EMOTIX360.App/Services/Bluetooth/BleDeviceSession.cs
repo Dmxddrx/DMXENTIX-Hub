@@ -125,6 +125,73 @@ public sealed class BleDeviceSession : IDeviceSession
         ProvisioningStatusPayloadReceived;
 
     // ========================================================
+    // HANDLE BLUETOOTH RADIO TURNED OFF
+    // ========================================================
+
+    public async Task HandleBluetoothUnavailableAsync(
+        CancellationToken cancellationToken = default)
+    {
+        StopHeartbeatMonitor();
+
+        await _gattSemaphore.WaitAsync(cancellationToken);
+
+        try
+        {
+            // No active connection or connection attempt to invalidate.
+            if (_device is null &&
+                _connectionState != DeviceConnectionState.Connecting &&
+                _connectionState != DeviceConnectionState.Reconnecting &&
+                _connectionState != DeviceConnectionState.Error)
+            {
+                return;
+            }
+
+            _intentionalDisconnect = true;
+
+            Debug.WriteLine(
+                $"[BleSession:{DeviceId}] Bluetooth unavailable. " +
+                "Invalidating session immediately."
+            );
+
+            // Bluetooth is already disabled.
+            // Detach local callbacks without attempting more GATT operations.
+            DetachNotificationHandlers();
+
+            ClearConnectionReferences();
+
+            SetConnectionState(
+                DeviceConnectionState.Disconnected
+            );
+        }
+        finally
+        {
+            _intentionalDisconnect = false;
+            _gattSemaphore.Release();
+        }
+    }
+
+    // ========================================================
+    // DETACH NOTIFICATION CALLBACKS
+    // ========================================================
+
+    private void DetachNotificationHandlers()
+    {
+        if (_statusCharacteristic is not null &&
+            _statusUpdatedHandler is not null)
+        {
+            _statusCharacteristic.ValueUpdated -=
+                _statusUpdatedHandler;
+        }
+
+        if (_wifiProvisioningCharacteristic is not null &&
+            _wifiProvisioningUpdatedHandler is not null)
+        {
+            _wifiProvisioningCharacteristic.ValueUpdated -=
+                _wifiProvisioningUpdatedHandler;
+        }
+    }
+
+    // ========================================================
     // CONNECT
     // ========================================================
 
@@ -185,6 +252,101 @@ public sealed class BleDeviceSession : IDeviceSession
 
             Debug.WriteLine(
                 $"[BleSession:{DeviceId}] GATT initialized."
+            );
+        }
+        catch
+        {
+            _intentionalDisconnect = true;
+
+            try
+            {
+                await StopNotificationsAsync();
+
+                IDevice? failedDevice = _device;
+
+                if (failedDevice is not null)
+                {
+                    try
+                    {
+                        await _adapter.DisconnectDeviceAsync(
+                            failedDevice
+                        );
+                    }
+                    catch
+                    {
+                        // Preserve the original connection exception.
+                    }
+                }
+            }
+            finally
+            {
+                ClearConnectionReferences();
+
+                _intentionalDisconnect = false;
+
+                SetConnectionState(DeviceConnectionState.Error);
+            }
+
+            throw;
+        }
+        finally
+        {
+            _gattSemaphore.Release();
+        }
+    }
+
+    // ========================================================
+    // CONNECT TO REMEMBERED DEVICE
+    // ========================================================
+
+    public async Task ConnectKnownDeviceAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        await _gattSemaphore.WaitAsync(cancellationToken);
+
+        try
+        {
+            if (IsConnected)
+                return;
+
+            _intentionalDisconnect = false;
+
+            SetConnectionState(DeviceConnectionState.Connecting);
+
+            using var connectCts =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken
+                );
+
+            connectCts.CancelAfter(TimeSpan.FromSeconds(15));
+
+            Debug.WriteLine(
+                $"[BleSession:{DeviceId}] Connecting to remembered device."
+            );
+
+            _device = await _adapter.ConnectToKnownDeviceAsync(
+                DeviceId,
+                new ConnectParameters(autoConnect: false),
+                connectCts.Token
+            );
+
+            _deviceName = string.IsNullOrWhiteSpace(_device.Name)
+                ? ProductName
+                : _device.Name;
+
+            await InitializeGattAsync(
+                _device,
+                connectCts.Token
+            );
+
+            SetConnectionState(DeviceConnectionState.Connected);
+
+            StartHeartbeatMonitor();
+
+            Debug.WriteLine(
+                $"[BleSession:{DeviceId}] Remembered device connected and GATT initialized."
             );
         }
         catch
