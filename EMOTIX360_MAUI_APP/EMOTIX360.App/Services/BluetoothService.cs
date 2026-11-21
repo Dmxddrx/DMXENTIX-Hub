@@ -89,6 +89,8 @@ public sealed class BluetoothService
 
     private readonly HashSet<Guid> _connectedSessionIds = new();
 
+    private readonly DeviceSessionSelectionService _sessionSelection;
+
     private IDeviceSession? _activeSession;
 
     // A deliberate disconnect suppresses automatic reconnection
@@ -98,11 +100,13 @@ public sealed class BluetoothService
     public BluetoothService(
         BleCentralService bleCentral,
         BleConnectionManager connectionManager,
-        DeviceDiscoveryService discovery)
+        DeviceDiscoveryService discovery,
+        DeviceSessionSelectionService sessionSelection)
     {
         _bleCentral = bleCentral;
         _connectionManager = connectionManager;
         _discovery = discovery;
+        _sessionSelection = sessionSelection;
 
         // Shared BLE discovery.
         _bleCentral.DeviceDiscovered += OnCentralDeviceDiscovered;
@@ -1043,6 +1047,10 @@ public sealed class BluetoothService
 
         _activeSession = session;
 
+        // Publish the selected session through the shared selection component.
+        _sessionSelection.SetSelectedSession(session);
+
+        // Retain the compatibility event for ViewModels not yet migrated.
         ActiveSessionChanged?.Invoke(session);
 
         if (session is null)

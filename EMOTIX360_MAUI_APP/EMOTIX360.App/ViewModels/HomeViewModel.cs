@@ -10,9 +10,11 @@ namespace EMOTIX360.App.ViewModels;
 
 public sealed class HomeViewModel : ObservableObject
 {
-    private readonly BluetoothService _bluetooth;
+    private readonly DeviceSessionSelectionService _sessionSelection;
     private readonly DeviceCommandService _commands;
     private readonly DeviceStatusService _statusService;
+
+    private IDeviceSession? _session;
 
     private bool _isConnected;
     private string _dashboardMessage = "Connect your EMOTIX360 to see live device data.";
@@ -95,11 +97,11 @@ public sealed class HomeViewModel : ObservableObject
     }
 
     public HomeViewModel(
-        BluetoothService bluetooth,
+        DeviceSessionSelectionService sessionSelection,
         DeviceCommandService commands,
         DeviceStatusService statusService)
     {
-        _bluetooth = bluetooth;
+        _sessionSelection = sessionSelection;
         _commands = commands;
         _statusService = statusService;
 
@@ -120,15 +122,14 @@ public sealed class HomeViewModel : ObservableObject
             OnBrightnessDragCompleted
         );
 
-        _bluetooth.ConnectionChanged += OnConnectionChanged;
-        _bluetooth.ActiveSessionChanged += OnActiveSessionChanged;
+        _sessionSelection.SelectedSessionChanged +=
+            OnSelectedSessionChanged;
 
         _statusService.StatusUpdated += OnStatusUpdated;
         _statusService.StatusCleared += OnStatusCleared;
 
-        IsConnected = _bluetooth.IsConnected;
-
-        _statusService.SetSession(_bluetooth.ActiveSession);
+        // Restore the currently selected device session.
+        OnSelectedSessionChanged(_sessionSelection.SelectedSession);
     }
 
     public ICommand OpenDeviceCommand { get; }
@@ -219,7 +220,7 @@ public sealed class HomeViewModel : ObservableObject
 
     private async Task SelectAnimationAsync(string? wireName)
     {
-        IDeviceSession? session = _bluetooth.ActiveSession;
+        IDeviceSession? session = _session;
 
         if (!IsConnected || session is null || !session.IsConnected)
         {
@@ -514,7 +515,7 @@ public sealed class HomeViewModel : ObservableObject
 
     private async Task ApplyBrightnessAsync()
     {
-        IDeviceSession? session = _bluetooth.ActiveSession;
+        IDeviceSession? session = _session;
 
         if (!IsConnected || session is null || !session.IsConnected)
         {
@@ -553,42 +554,108 @@ public sealed class HomeViewModel : ObservableObject
         }
     }
 
-    private void OnActiveSessionChanged(IDeviceSession? session)
+
+    // ========================================================
+    // SELECTED DEVICE SESSION
+    // ========================================================
+
+    private void OnSelectedSessionChanged(IDeviceSession? session)
     {
+        // Remove the previous session subscription.
+        if (_session is not null)
+        {
+            _session.StateChanged -= OnSessionStateChanged;
+        }
+
+        _session = session;
+
+        // Subscribe to the newly selected session.
+        if (_session is not null)
+        {
+            _session.StateChanged += OnSessionStateChanged;
+        }
+
+        // Tell the status service which device to monitor.
         _statusService.SetSession(session);
+
+        MainThread.BeginInvokeOnMainThread(
+            UpdateConnectionState
+        );
     }
-    private void OnConnectionChanged(bool connected, string? detail)
+
+    // ========================================================
+    // SESSION CONNECTION STATE
+    // ========================================================
+
+    private void OnSessionStateChanged(IDeviceSession session)
     {
+        if (!ReferenceEquals(session, _session))
+            return;
+
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            IsConnected = connected;
-            DashboardMessage = connected
-                ? $"Connected to {detail ?? BluetoothService.DeviceName}. Waiting for telemetry."
-                : detail ?? "EMOTIX360 is disconnected.";
+            if (!ReferenceEquals(session, _session))
+                return;
 
-            if (!connected)
-            {
-                // Stop any active brightness preview.
-                CancelBrightnessPreviewTimeout();
+            // Ignore state notifications that do not change
+            // the selected session's connected state.
+            if (IsConnected == session.IsConnected)
+                return;
 
-                _isBrightnessDragging = false;
-                _isBrightnessPreviewActive = false;
-                _pendingBrightnessValue = null;
-
-                _deviceBrightnessValue = null;
-
-                BrightnessValue = 5;
-
-                // Other initials
-                ClearModeSelectionState();
-
-                ActiveModeText = "--";
-                BrightnessText = "--";
-                WifiText = "--";
-                MotionText = "--";
-                TimeText = "--";
-            }
+            UpdateConnectionState();
         });
+    }
+
+    // ========================================================
+    // UPDATE DASHBOARD CONNECTION STATE
+    // ========================================================
+
+    private void UpdateConnectionState()
+    {
+        bool connected = _session?.IsConnected == true;
+
+        IsConnected = connected;
+
+        if (connected)
+        {
+            DashboardMessage =
+                $"Connected to {_session!.DeviceName}. Waiting for telemetry.";
+
+            return;
+        }
+
+        DashboardMessage = _session is null
+            ? "Connect to EMOTIX360 to see live device data."
+            : "EMOTIX360 is disconnected.";
+
+        ResetDeviceDisplay();
+    }
+
+    // ========================================================
+    // RESET DEVICE DISPLAY
+    // ========================================================
+
+    private void ResetDeviceDisplay()
+    {
+        // Stop any active brightness preview.
+        CancelBrightnessPreviewTimeout();
+
+        _isBrightnessDragging = false;
+        _isBrightnessPreviewActive = false;
+        _pendingBrightnessValue = null;
+
+        _deviceBrightnessValue = null;
+
+        BrightnessValue = 5;
+
+        // Clear animation selection.
+        ClearModeSelectionState();
+
+        ActiveModeText = "--";
+        BrightnessText = "--";
+        WifiText = "--";
+        MotionText = "--";
+        TimeText = "--";
     }
 
     private void OnStatusUpdated(DeviceStatus status)
@@ -598,28 +665,9 @@ public sealed class HomeViewModel : ObservableObject
 
     private void OnStatusCleared()
     {
-        MainThread.BeginInvokeOnMainThread(() =>
-        {
-            // Stop any active brightness preview.
-            CancelBrightnessPreviewTimeout();
-
-            _isBrightnessDragging = false;
-            _isBrightnessPreviewActive = false;
-            _pendingBrightnessValue = null;
-
-            _deviceBrightnessValue = null;
-
-            BrightnessValue = 5;
-
-            // Other initials
-            ClearModeSelectionState();
-
-            ActiveModeText = "--";
-            BrightnessText = "--";
-            WifiText = "--";
-            MotionText = "--";
-            TimeText = "--";
-        });
+        MainThread.BeginInvokeOnMainThread(
+            ResetDeviceDisplay
+        );
     }
     private void ClearModeSelectionState()
     {
