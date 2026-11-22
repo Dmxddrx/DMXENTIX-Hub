@@ -8,8 +8,12 @@ namespace BluetoothManager {
 bool begin();
 bool isConnected();
 
-// Publish relative microphone metrics through the Status characteristic.
-void publishAudioMetrics(uint16_t rms, uint16_t peak);
+void publishTelemetry(
+    uint16_t rms,
+    uint16_t peak,
+    float chipTemperatureC,
+    bool chipTemperatureValid
+);
 
 }
 

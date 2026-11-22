@@ -131,7 +131,7 @@ bool begin()
         return false;
     }
 
-    statusCharacteristic->setValue("RMS=0,PK=0");
+    statusCharacteristic->setValue("RMS=0,PK=0,TEMP=NA");
 
     // In NimBLE-Arduino 2.x services are registered when the server starts.
     // Calling service->start() is deprecated and has no effect.
@@ -181,20 +181,41 @@ bool isConnected()
     );
 }
 
-void publishAudioMetrics(uint16_t rms, uint16_t peak)
+void publishTelemetry(
+    uint16_t rms,
+    uint16_t peak,
+    float chipTemperatureC,
+    bool chipTemperatureValid
+)
 {
     if (statusCharacteristic == nullptr) {
         return;
     }
 
-    char payload[40];
-    snprintf(
-        payload,
-        sizeof(payload),
-        "RMS=%u,PK=%u",
-        static_cast<unsigned int>(rms),
-        static_cast<unsigned int>(peak)
-    );
+    char payload[64];
+
+    if (chipTemperatureValid) {
+
+        // Temperature is transmitted in degrees Celsius.
+        snprintf(
+            payload,
+            sizeof(payload),
+            "RMS=%u,PK=%u,TEMP=%.1f",
+            static_cast<unsigned int>(rms),
+            static_cast<unsigned int>(peak),
+            static_cast<double>(chipTemperatureC)
+        );
+
+    } else {
+
+        snprintf(
+            payload,
+            sizeof(payload),
+            "RMS=%u,PK=%u,TEMP=NA",
+            static_cast<unsigned int>(rms),
+            static_cast<unsigned int>(peak)
+        );
+    }
 
     statusCharacteristic->setValue(payload);
 
