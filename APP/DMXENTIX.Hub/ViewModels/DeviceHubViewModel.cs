@@ -26,6 +26,7 @@ public sealed class DeviceHubViewModel : ObservableObject
     private bool _isBluetoothOn;
 
     private int _savedDeviceCount;
+    private bool _skipNextAppearanceScan;
 
     private string _statusMessage =
         "Preparing the device manager...";
@@ -262,19 +263,34 @@ public sealed class DeviceHubViewModel : ObservableObject
     }
 
     // ========================================================
+    // SKIP SCAN WHEN OPENING A DEVICE WORKSPACE
+    // ========================================================
+
+    public void SkipNextAppearanceScan()
+    {
+        _skipNextAppearanceScan = true;
+    }
+
+    // ========================================================
     // INITIALIZE DEVICE MANAGER
     // ========================================================
 
     public async Task InitializeAsync()
     {
+        // Consume the flag for this page appearance only.
+        bool skipScan = _skipNextAppearanceScan;
+        _skipNextAppearanceScan = false;
+
         if (_isInitialized)
         {
             RefreshConnectedSessions();
             RefreshDiscoveredDevices();
 
-            // Start a fresh discovery scan whenever
-            // the user returns to the Devices tab.
-            await ScanAsync(requestEnableWhenOff: false);
+            // Normal Devices-tab visits still start a fresh scan.
+            if (!skipScan)
+            {
+                await ScanAsync(requestEnableWhenOff: false);
+            }
 
             return;
         }
@@ -308,8 +324,6 @@ public sealed class DeviceHubViewModel : ObservableObject
         RefreshConnectedSessions();
         RefreshDiscoveredDevices();
 
-        // Save any sessions that connected before this page
-        // finished initializing.
         foreach (IDeviceSession session in _connectionManager.Sessions)
         {
             if (session.IsConnected)
@@ -322,10 +336,10 @@ public sealed class DeviceHubViewModel : ObservableObject
         // AUTOMATIC STARTUP DISCOVERY
         // ----------------------------------------------------
 
-        // Do not automatically show the Android Bluetooth
-        // activation dialog during startup.
-        // The scan button handles that explicit user action.
-        await ScanAsync(requestEnableWhenOff: false);
+        if (!skipScan)
+        {
+            await ScanAsync(requestEnableWhenOff: false);
+        }
     }
 
     // ========================================================

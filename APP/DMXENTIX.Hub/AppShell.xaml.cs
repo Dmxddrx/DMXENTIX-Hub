@@ -46,6 +46,13 @@ public partial class AppShell : Shell
 
     protected override bool OnBackButtonPressed()
     {
+        // Close the Home information popup before navigating
+        // or allowing Android to handle the Back action.
+        if (CurrentPage is HomePage homePage &&
+            homePage.TryCloseInfoPopup())
+        {
+            return true;
+        }
         string currentRoute =
             CurrentState.Location.OriginalString.Trim('/');
 

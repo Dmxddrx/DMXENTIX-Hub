@@ -1,36 +1,36 @@
-
-using Microsoft.Maui.Controls;
+using DMXENTIX.Hub.ViewModels;
 
 namespace DMXENTIX.Hub.Views;
 
 public partial class HomePage : ContentPage
 {
-    public HomePage()
+    private readonly HomeViewModel _viewModel;
+
+    public HomePage(HomeViewModel viewModel)
     {
         InitializeComponent();
+
+        _viewModel = viewModel;
+
+        BindingContext = _viewModel;
     }
 
     // ========================================================
-    // OPEN DEVICE HUB
+    // REFRESH HOME WHEN IT BECOMES VISIBLE
     // ========================================================
 
-    private async void OnOpenDeviceHubClicked(
-        object sender,
-        EventArgs e)
+    protected override async void OnAppearing()
     {
-        Shell? shell = Shell.Current;
+        base.OnAppearing();
 
-        if (shell is not null)
-        {
-            await shell.GoToAsync("//devices");
-        }
+        await _viewModel.InitializeAsync();
     }
 
     // ========================================================
-    // OPEN MY DEVICES
+    // FIND DEVICE
     // ========================================================
 
-    private async void OnOpenMyDevicesClicked(
+    private async void OnFindDeviceClicked(
         object sender,
         EventArgs e)
     {
@@ -39,9 +39,20 @@ public partial class HomePage : ContentPage
         if (shell is null)
             return;
 
-        // My Devices belongs to the Devices navigation section.
         await shell.GoToAsync("//devices");
+    }
 
-        await shell.GoToAsync("my-devices");
+    // ========================================================
+    // CLOSE INFORMATION POPUP FROM ANDROID BACK
+    // ========================================================
+
+    public bool TryCloseInfoPopup()
+    {
+        if (!_viewModel.IsInfoPopupVisible)
+            return false;
+
+        _viewModel.CloseInformationPopup();
+
+        return true;
     }
 }
