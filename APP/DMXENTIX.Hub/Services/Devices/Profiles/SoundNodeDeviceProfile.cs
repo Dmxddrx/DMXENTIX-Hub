@@ -39,14 +39,6 @@ public sealed class SoundNodeDeviceProfile : IDeviceProfile
         advertisedName = device.Name?.Trim() ?? string.Empty;
         matchDetails = string.Empty;
 
-        if (!string.Equals(
-                advertisedName,
-                AdvertisedName,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
         bool hasServiceUuidRecords = false;
         bool hasExpectedServiceUuid = false;
 
@@ -95,15 +87,39 @@ public sealed class SoundNodeDeviceProfile : IDeviceProfile
                 break;
         }
 
-        if (hasServiceUuidRecords && !hasExpectedServiceUuid)
+        // A matching unique service UUID is sufficient for identification.
+        if (hasExpectedServiceUuid)
         {
-            return false;
+            matchDetails =
+                string.Equals(
+                    advertisedName,
+                    AdvertisedName,
+                    StringComparison.OrdinalIgnoreCase)
+                ? "Advertised name + service UUID"
+                : string.IsNullOrWhiteSpace(advertisedName)
+                    ? "Service UUID; local name unavailable"
+                    : $"Service UUID; reported name: {advertisedName}";
+
+            return true;
         }
 
-        matchDetails = hasExpectedServiceUuid
-            ? "Advertised name + service UUID"
-            : "Exact advertised name; service UUID record unavailable";
+        // If the advertisement contains service UUID records,
+        // do not identify it by name alone when those UUIDs differ.
+        if (hasServiceUuidRecords)
+            return false;
 
-        return true;
+        // Fall back to the exact name only when UUID records are unavailable.
+        if (string.Equals(
+                advertisedName,
+                AdvertisedName,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            matchDetails =
+                "Exact advertised name; service UUID record unavailable";
+
+            return true;
+        }
+
+        return false;
     }
 }

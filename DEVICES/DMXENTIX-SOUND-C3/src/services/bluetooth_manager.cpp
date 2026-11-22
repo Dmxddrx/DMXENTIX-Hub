@@ -141,14 +141,26 @@ bool begin()
     }
 
     NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
+
     if (advertising == nullptr) {
         Serial.println("[BLE] Failed to obtain advertising instance");
         return false;
     }
 
-    advertising->addServiceUUID(SOUNDNODE_SERVICE_UUID);
-    advertising->setName(DEVICE_NAME);
+    // Enable scan response BEFORE setting the advertised name.
+    // The 128-bit service UUID stays in the main advertisement,
+    // while the full device name is placed in the scan response.
     advertising->enableScanResponse(true);
+
+    if (!advertising->addServiceUUID(SOUNDNODE_SERVICE_UUID)) {
+        Serial.println("[BLE] Failed to add SoundNode service UUID");
+        return false;
+    }
+
+    if (!advertising->setName(DEVICE_NAME)) {
+        Serial.println("[BLE] Failed to set SoundNode advertised name");
+        return false;
+    }
 
     if (!advertising->start()) {
         Serial.println("[BLE] Failed to start advertising");
