@@ -39,7 +39,7 @@ public partial class HomePage : ContentPage
         if (shell is null)
             return;
 
-        await shell.GoToAsync("//devices");
+        await shell.GoToAsync("devices");
     }
 
     // ========================================================

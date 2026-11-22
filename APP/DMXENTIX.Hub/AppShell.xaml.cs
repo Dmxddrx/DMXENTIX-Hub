@@ -10,16 +10,9 @@ public partial class AppShell : Shell
     {
         InitializeComponent();
 
-        // Resolve pages through dependency injection.
-        // Home is the first Shell destination.
         HomeShellContent.ContentTemplate =
             new DataTemplate(
                 () => services.GetRequiredService<HomePage>()
-            );
-
-        DevicesShellContent.ContentTemplate =
-            new DataTemplate(
-                () => services.GetRequiredService<DeviceHubPage>()
             );
 
         SettingsShellContent.ContentTemplate =
@@ -27,13 +20,17 @@ public partial class AppShell : Shell
                 () => services.GetRequiredService<SettingsPage>()
             );
 
-        // Register the saved-device collection page.
+        // Device discovery is a normal page, not a footer tab.
+        Routing.RegisterRoute(
+            "devices",
+            typeof(DeviceHubPage)
+        );
+
         Routing.RegisterRoute(
             "my-devices",
             typeof(MyDevicesPage)
         );
 
-        // Register individual product workspaces.
         Routing.RegisterRoute(
             "device-workspace",
             typeof(DeviceWorkspacePage)

@@ -13,16 +13,10 @@
 
     <TabBar>
 
-        <!-- Home is the application starting page. -->
         <ShellContent
             x:Name="HomeShellContent"
             Title="Home"
             Route="home" />
-
-        <ShellContent
-            x:Name="DevicesShellContent"
-            Title="Devices"
-            Route="devices" />
 
         <ShellContent
             x:Name="SettingsShellContent"

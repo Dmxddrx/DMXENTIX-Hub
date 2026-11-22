@@ -18,6 +18,14 @@ public partial class DeviceHubPage : ContentPage
     {
         base.OnAppearing();
 
+        _viewModel.SetDiscoveryPageVisible(true);
+
         await _viewModel.InitializeAsync();
+    }
+    protected override void OnDisappearing()
+    {
+        _viewModel.SetDiscoveryPageVisible(false);
+
+        base.OnDisappearing();
     }
 }

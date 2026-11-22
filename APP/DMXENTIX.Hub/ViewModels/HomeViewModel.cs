@@ -27,21 +27,17 @@ public sealed class HomeViewModel : ObservableObject
 
     private string _statusMessage = string.Empty;
 
-    private readonly DeviceHubViewModel _deviceHubViewModel;
-
     private DeviceCardViewModel? _selectedInfoCard;
     private bool _isInfoPopupVisible;
 
     public HomeViewModel(
         DeviceRegistryService deviceRegistry,
-        BleConnectionManager connectionManager,
-        DeviceHubViewModel deviceHubViewModel)
+        BleConnectionManager connectionManager)
     {
         _deviceRegistry = deviceRegistry;
         _connectionManager = connectionManager;
-        _deviceHubViewModel = deviceHubViewModel;
 
-    OpenWorkspaceCommand = new Command<DeviceCardViewModel>(
+        OpenWorkspaceCommand = new Command<DeviceCardViewModel>(
             async card => await OpenWorkspaceAsync(card),
             card => card is not null
         );
@@ -518,11 +514,8 @@ public sealed class HomeViewModel : ObservableObject
 
         try
         {
-            // Device workspaces belong to the Devices tab stack.
-            // Skip the automatic discovery scan for this navigation.
-            _deviceHubViewModel.SkipNextAppearanceScan();
-            await shell.GoToAsync("//devices");
-
+            // Open the workspace directly from the current
+            // navigation stack. Do not open DeviceHubPage.
             await shell.GoToAsync(
                 "device-workspace",
                 new Dictionary<string, object>

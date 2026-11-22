@@ -315,11 +315,8 @@ public sealed class MyDevicesViewModel : ObservableObject
 
         try
         {
-            // Always host individual device workspaces
-            // inside the Devices tab navigation stack.
-            await shell.GoToAsync("//devices");
-
-            // Open the selected device workspace.
+            // Open the selected device directly.
+            // Do not navigate through DeviceHubPage.
             await shell.GoToAsync(
                 "device-workspace",
                 new Dictionary<string, object>
