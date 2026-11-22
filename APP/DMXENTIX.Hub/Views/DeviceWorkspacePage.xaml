@@ -243,6 +243,14 @@
 
 
             <!-- ================================================= -->
+            <!-- EMOTIX360 WI-FI PROVISIONING                      -->
+            <!-- ================================================= -->
+
+            <views:Emotix360WifiProvisioningView
+                x:Name="Emotix360WifiProvisioning"
+                IsVisible="{Binding IsWifiProvisioningVisible}" />
+            
+            <!-- ================================================= -->
             <!-- FOOTER                                            -->
             <!-- ================================================= -->
 

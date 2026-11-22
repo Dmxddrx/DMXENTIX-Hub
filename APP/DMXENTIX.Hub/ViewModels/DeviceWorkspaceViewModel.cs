@@ -31,6 +31,8 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
 
     private string _statusMessage = "Loading device workspace...";
 
+    public event Action<IDeviceSession?>? WorkspaceSessionChanged;
+
     public DeviceWorkspaceViewModel(
         DeviceRegistryService deviceRegistry,
         BleConnectionManager connectionManager,
@@ -98,6 +100,9 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
     public bool IsDashboardVisible =>
         IsEmotix360Workspace && IsConnected;
 
+    public bool IsWifiProvisioningVisible =>
+        IsEmotix360Workspace && IsConnected;
+
     public bool IsWorkspaceMessageVisible =>
         !IsDashboardVisible;
 
@@ -159,6 +164,7 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
                 OnPropertyChanged(nameof(WorkspaceMessage));
                 OnPropertyChanged(nameof(IsDashboardVisible));
                 OnPropertyChanged(nameof(IsWorkspaceMessageVisible));
+                OnPropertyChanged(nameof(IsWifiProvisioningVisible));
             }
         }
     }
@@ -224,6 +230,7 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
 
             _record = null;
             _session = null;
+            WorkspaceSessionChanged?.Invoke(null);
             _targetBluetoothDeviceId = null;
 
             ClearSoundNodeTelemetry();
@@ -493,6 +500,14 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
 
         IsConnected = currentSession?.IsConnected == true;
 
+        // Only an active, connected EMOTIX360 session can provide
+        // Wi-Fi provisioning to this workspace.
+        WorkspaceSessionChanged?.Invoke(
+            IsWifiProvisioningVisible
+                ? currentSession
+                : null
+        );
+
         if (IsConnected && currentSession is not null)
         {
             // Process the most recent payload as well as future notifications.
@@ -535,6 +550,7 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
 
         UnsubscribeFromSessionStatus();
         UnsubscribeFromConnectionManager();
+        WorkspaceSessionChanged?.Invoke(null);
 
         ClearSoundNodeTelemetry();
 
@@ -567,5 +583,6 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
         OnPropertyChanged(nameof(IsWorkspaceMessageVisible));
         OnPropertyChanged(nameof(IsSoundNodeWorkspace));
         OnPropertyChanged(nameof(IsSoundNodeDashboardVisible));
+        OnPropertyChanged(nameof(IsWifiProvisioningVisible));
     }
 }

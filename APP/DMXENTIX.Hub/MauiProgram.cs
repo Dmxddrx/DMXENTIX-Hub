@@ -48,7 +48,7 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<DeviceCommandService>();
         builder.Services.AddSingleton<DeviceStatusService>();
-        builder.Services.AddSingleton<WifiProvisioningService>();
+        builder.Services.AddTransient<WifiProvisioningService>();
         builder.Services.AddSingleton<WifiNetworkInfoService>();
 
         // Persistent multi-device registry.
@@ -61,7 +61,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<MyDevicesViewModel>();
         builder.Services.AddSingleton<Emotix360DashboardViewModel>();
         builder.Services.AddSingleton<DeviceViewModel>();
-        builder.Services.AddSingleton<WifiProvisioningViewModel>();
+        builder.Services.AddTransient<WifiProvisioningViewModel>();
         // Individual device workspace.
         builder.Services.AddTransient<DeviceWorkspaceViewModel>();
 

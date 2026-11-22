@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DMXENTIX.Hub.Models;
 using DMXENTIX.Hub.Services.Bluetooth;
+using AppDeviceType = global::DMXENTIX.Hub.Models.Devices.DeviceType;
 
 namespace DMXENTIX.Hub.Services
 {
@@ -31,6 +32,15 @@ namespace DMXENTIX.Hub.Services
 
         public void SetSession(IDeviceSession? session)
         {
+            // Reject unsupported product sessions.
+            if (session is not null &&
+                session.DeviceType != AppDeviceType.Emotix360)
+            {
+                throw new NotSupportedException(
+                    "Wi-Fi provisioning is only supported by EMOTIX360."
+                );
+            }
+
             if (ReferenceEquals(_session, session))
                 return;
 
@@ -206,6 +216,14 @@ namespace DMXENTIX.Hub.Services
             IDeviceSession session)
         {
             ArgumentNullException.ThrowIfNull(session);
+            
+            // Reject unsupported product sessions.
+            if (session.DeviceType != AppDeviceType.Emotix360)
+            {
+                throw new NotSupportedException(
+                    "Wi-Fi provisioning is only supported by EMOTIX360."
+                );
+            }
 
             if (!session.IsConnected)
             {

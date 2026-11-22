@@ -42,6 +42,9 @@
     <MauiXaml Update="Views\Emotix360DashboardView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </MauiXaml>
+    <MauiXaml Update="Views\Emotix360WifiProvisioningView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </MauiXaml>
     <MauiXaml Update="Views\HomePage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </MauiXaml>

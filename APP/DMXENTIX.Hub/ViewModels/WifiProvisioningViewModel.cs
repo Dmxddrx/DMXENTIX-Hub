@@ -7,12 +7,13 @@ using DMXENTIX.Hub.Services;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using DMXENTIX.Hub.Services.Bluetooth;
+using AppDeviceType = global::DMXENTIX.Hub.Models.Devices.DeviceType;
 
 namespace DMXENTIX.Hub.ViewModels
 {
     public sealed class WifiProvisioningViewModel : ObservableObject
     {
-        private readonly DeviceSessionSelectionService _sessionSelection;
+        private int _sessionVersion;
         private readonly WifiProvisioningService _provisioning;
         private readonly WifiNetworkInfoService _phoneWifi;
 
@@ -39,11 +40,9 @@ namespace DMXENTIX.Hub.ViewModels
         private bool _waitingForDeviceResult;
 
         public WifiProvisioningViewModel(
-            DeviceSessionSelectionService sessionSelection,
             WifiProvisioningService provisioning,
             WifiNetworkInfoService phoneWifi)
         {
-            _sessionSelection = sessionSelection;
             _provisioning = provisioning;
             _phoneWifi = phoneWifi;
 
@@ -67,24 +66,27 @@ namespace DMXENTIX.Hub.ViewModels
                 () => CanClearStoredNetworks
             );
 
-            _sessionSelection.SelectedSessionChanged +=
-                OnSelectedSessionChanged;
-
             _provisioning.StatusUpdated += OnStatusUpdated;
             _provisioning.StatusCleared += OnStatusCleared;
-
-            // Restore the currently selected session.
-            OnSelectedSessionChanged(
-                _sessionSelection.SelectedSession
-            );
         }
 
         // ========================================================
-        // SELECTED DEVICE SESSION
+        // WORKSPACE DEVICE SESSION
         // ========================================================
 
-        private void OnSelectedSessionChanged(IDeviceSession? session)
+        public void SetSession(IDeviceSession? session)
         {
+            // Wi-Fi provisioning is exclusively an EMOTIX360 feature.
+            // Other product sessions must never reach this service.
+            if (session is not null &&
+                session.DeviceType != AppDeviceType.Emotix360)
+            {
+                session = null;
+            }
+
+            if (ReferenceEquals(_session, session))
+                return;
+
             // Remove the previous session subscription.
             if (_session is not null)
             {
@@ -93,18 +95,26 @@ namespace DMXENTIX.Hub.ViewModels
 
             _session = session;
 
-            // Subscribe to the newly selected session.
+            // Invalidate any queued status updates from the old session.
+            _sessionVersion++;
+
+            // Subscribe to the new workspace session.
             if (_session is not null)
             {
                 _session.StateChanged += OnSessionStateChanged;
             }
 
-            // Tell the provisioning service which device to monitor.
-            _provisioning.SetSession(session);
+            // The provisioning service now monitors this workspace's session.
+            _provisioning.SetSession(_session);
 
             MainThread.BeginInvokeOnMainThread(
                 UpdateConnectionState
             );
+        }
+
+        public void Deactivate()
+        {
+            SetSession(null);
         }
 
         // ========================================================
@@ -486,8 +496,13 @@ namespace DMXENTIX.Hub.ViewModels
 
         private void OnStatusCleared()
         {
+            int sessionVersion = _sessionVersion;
+
             MainThread.BeginInvokeOnMainThread(() =>
             {
+                if (sessionVersion != _sessionVersion)
+                    return;
+
                 _waitingForDeviceResult = false;
 
                 HasDeviceStatus = false;
@@ -501,9 +516,15 @@ namespace DMXENTIX.Hub.ViewModels
 
         private void OnStatusUpdated(WifiProvisioningStatus status)
         {
-            MainThread.BeginInvokeOnMainThread(
-                () => ApplyDeviceStatus(status)
-            );
+            int sessionVersion = _sessionVersion;
+
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                if (sessionVersion != _sessionVersion)
+                    return;
+
+                ApplyDeviceStatus(status);
+            });
         }
 
         private void ApplyDeviceStatus(WifiProvisioningStatus status)
