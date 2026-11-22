@@ -20,5 +20,7 @@ public enum DeviceCapabilities
     DustTelemetry = 1 << 7,
     SensorConfiguration = 1 << 8,
 
-    RemoteDiagnostics = 1 << 9
+    RemoteDiagnostics = 1 << 9,
+
+    AudioLevelTelemetry = 1 << 10
 }

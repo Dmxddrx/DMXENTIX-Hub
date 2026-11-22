@@ -5,6 +5,7 @@ using DMXENTIX.Hub.Models;
 using DMXENTIX.Hub.Services;
 using Microsoft.Maui.Graphics;
 using DMXENTIX.Hub.Services.Bluetooth;
+using AppDeviceType = global::DMXENTIX.Hub.Models.Devices.DeviceType;
 
 namespace DMXENTIX.Hub.ViewModels;
 
@@ -561,6 +562,14 @@ public sealed class HomeViewModel : ObservableObject
 
     private void OnSelectedSessionChanged(IDeviceSession? session)
     {
+        // The Home dashboard and its commands are EMOTIX360-specific.
+        // Other products use their own device workspaces.
+        if (session is not null &&
+            session.DeviceType != AppDeviceType.Emotix360)
+        {
+            session = null;
+        }
+
         // Remove the previous session subscription.
         if (_session is not null)
         {

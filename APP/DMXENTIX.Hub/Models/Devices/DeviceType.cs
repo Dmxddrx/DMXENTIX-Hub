@@ -9,5 +9,6 @@ public enum DeviceType
     Unknown = 0,
     Emotix360 = 1,
     ClimateNode360 = 2,
-    Moppy = 3
+    Moppy = 3,
+    SoundNode = 4
 }

@@ -267,9 +267,18 @@ public sealed class BluetoothService
 
     public async Task ConnectAsync(Guid deviceId)
     {
-        // Stop an automatic connection attempt before starting
-        // a user-requested connection.
-        StopAutoConnectLoop(manualDisconnect: false);
+        // Determine which product is being connected.
+        DiscoveredDeviceInfo? discoveredDevice =
+            _discovery.DiscoveredDevices.FirstOrDefault(
+                device => device.Id == deviceId
+            );
+
+        // Stop the legacy automatic connection loop only when
+        // the user manually connects an EMOTIX360.
+        if (discoveredDevice?.DeviceType == AppDeviceType.Emotix360)
+        {
+            StopAutoConnectLoop(manualDisconnect: false);
+        }
 
         _manualDisconnectRequested = false;
 
@@ -290,12 +299,24 @@ public sealed class BluetoothService
                 IDeviceSession session =
                     await _connectionManager.ConnectAsync(deviceId);
 
-                SetActiveSession(session);
+                // The legacy active-session and remembered-device workflow
+                // belongs exclusively to EMOTIX360.
+                if (session.DeviceType == AppDeviceType.Emotix360)
+                {
+                    SetActiveSession(session);
 
-                SaveRememberedDevice(
-                    session.DeviceId,
-                    session.DeviceName
-                );
+                    SaveRememberedDevice(
+                        session.DeviceId,
+                        session.DeviceName
+                    );
+                }
+                else
+                {
+                    Debug.WriteLine(
+                        $"[BLE] Connected {session.ProductName} through generic device session. " +
+                        "EMOTIX360 remembered-device identity was preserved."
+                    );
+                }
 
                 Debug.WriteLine(
                     $"[BLE] Session connected: {session.DeviceName}, " +
@@ -920,7 +941,8 @@ public sealed class BluetoothService
         session.ProvisioningStatusPayloadReceived +=
             OnSessionProvisioningStatusPayloadReceived;
 
-        if (_activeSession is null || !_activeSession.IsConnected)
+        if (session.DeviceType == AppDeviceType.Emotix360 &&
+            (_activeSession is null || !_activeSession.IsConnected))
         {
             SetActiveSession(session);
         }
@@ -944,7 +966,10 @@ public sealed class BluetoothService
         {
             IDeviceSession? nextSession =
                 _connectionManager.Sessions
-                    .FirstOrDefault(item => item.IsConnected);
+                    .FirstOrDefault(item =>
+                        item.DeviceType == AppDeviceType.Emotix360 &&
+                        item.IsConnected
+                    );
 
             SetActiveSession(nextSession);
         }

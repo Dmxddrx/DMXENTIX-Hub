@@ -28,6 +28,7 @@ public static class MauiProgram
 
         // Product advertisement profiles.
         builder.Services.AddSingleton<IDeviceProfile, Emotix360DeviceProfile>();
+        builder.Services.AddSingleton<IDeviceProfile, SoundNodeDeviceProfile>();
 
         // Product discovery.
         builder.Services.AddSingleton<DeviceDiscoveryService>();
@@ -35,6 +36,7 @@ public static class MauiProgram
         // Registered product BLE protocols.
         // These protocol definitions are stateless and can be shared.
         builder.Services.AddSingleton<IDeviceProtocol, Emotix360Protocol>();
+        builder.Services.AddSingleton<IDeviceProtocol, SoundNodeProtocol>();
 
         // Multi-device session manager.
         builder.Services.AddSingleton<BleConnectionManager>();
