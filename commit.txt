@@ -1,13 +1,27 @@
-EMOTIX360: Add automatic BLE reconnection and Android foreground service
+**Commit message:**
 
-- Remember the successfully connected ESP32-S3 BLE device ID and name.
-- Automatically reconnect to the remembered device when the app starts.
-- Fall back to BLE scanning when the remembered device cannot be reached.
-- Retry unavailable-device connections with increasing retry intervals.
-- Report automatic connection progress through BluetoothService.
-- Reconnect automatically after unexpected BLE disconnections and heartbeat timeouts.
-- Preserve manual disconnect behaviour so the app does not reconnect against the user's request.
-- Add an Android connectedDevice foreground service with a persistent notification.
-- Restore the BLE auto-connect manager when Android recreates the sticky service.
-- Add the Android foreground-service permissions required for connected-device operation.
-- Clean up failed BLE/GATT initialization attempts and serialize connection operations.
+```text
+feat(soundnode): add ESP32-C3 MAX9814 BLE firmware
+```
+
+**Commit description:**
+
+```text
+Add DMXENTIX SoundNode as a separate ESP32-C3 PlatformIO firmware project.
+
+- Establish layered firmware architecture for SoundNode.
+- Add MAX9814 microphone driver using ESP32-C3 ADC.
+- Implement 8 kHz audio sampling and RMS/peak processing.
+- Add NimBLE-Arduino 2.5.2 BLE GATT server.
+- Define unique SoundNode service and characteristic UUIDs.
+- Advertise device as DMXENTIX-SOUND.
+- Implement BLE command handling with PING/PONG response.
+- Add automatic BLE advertising restart after disconnection.
+- Add hardware wiring and firmware setup documentation.
+- Correct NimBLE-Arduino 2.5.2 callback signatures and registration.
+
+Validation:
+- PlatformIO firmware build completed without errors.
+- Firmware successfully uploaded to ESP32-C3.
+- DMXENTIX Hub successfully discovers DMXENTIX-SOUND.
+```
