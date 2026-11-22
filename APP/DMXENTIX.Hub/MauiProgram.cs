@@ -59,7 +59,7 @@ public static class MauiProgram
         // Shared view-model state is retained while navigating between tabs.
         builder.Services.AddSingleton<DeviceHubViewModel>();
         builder.Services.AddSingleton<MyDevicesViewModel>();
-        builder.Services.AddSingleton<HomeViewModel>();
+        builder.Services.AddSingleton<Emotix360DashboardViewModel>();
         builder.Services.AddSingleton<DeviceViewModel>();
         builder.Services.AddSingleton<WifiProvisioningViewModel>();
         // Individual device workspace.

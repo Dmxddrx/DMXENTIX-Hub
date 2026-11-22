@@ -535,6 +535,17 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
 
         UnsubscribeFromSessionStatus();
         UnsubscribeFromConnectionManager();
+
+        ClearSoundNodeTelemetry();
+
+        // Clear the selected session only if it belongs
+        // to the workspace that is being closed.
+        if (_targetBluetoothDeviceId.HasValue &&
+            _sessionSelection.SelectedSession?.DeviceId ==
+                _targetBluetoothDeviceId.Value)
+        {
+            _sessionSelection.SetSelectedSession(null);
+        }
     }
 
     // ========================================================

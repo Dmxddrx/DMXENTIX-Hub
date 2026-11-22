@@ -9,7 +9,7 @@ using AppDeviceType = global::DMXENTIX.Hub.Models.Devices.DeviceType;
 
 namespace DMXENTIX.Hub.ViewModels;
 
-public sealed class HomeViewModel : ObservableObject
+public sealed class Emotix360DashboardViewModel : ObservableObject
 {
     private readonly DeviceSessionSelectionService _sessionSelection;
     private readonly DeviceCommandService _commands;
@@ -97,7 +97,7 @@ public sealed class HomeViewModel : ObservableObject
         OnPropertyChanged(nameof(ModeSelectionStatusText));
     }
 
-    public HomeViewModel(
+    public Emotix360DashboardViewModel(
         DeviceSessionSelectionService sessionSelection,
         DeviceCommandService commands,
         DeviceStatusService statusService)
