@@ -20,6 +20,7 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
 
     private DeviceRecord? _record;
     private IDeviceSession? _session;
+    private SoundNodeTelemetry? _soundNodeTelemetry;
 
     private Guid? _targetBluetoothDeviceId;
 
@@ -88,11 +89,46 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
     public bool IsEmotix360Workspace =>
         _record?.DeviceType == AppDeviceType.Emotix360;
 
+    public bool IsSoundNodeWorkspace =>
+        _record?.DeviceType == AppDeviceType.SoundNode;
+
+    public bool IsSoundNodeDashboardVisible =>
+        IsSoundNodeWorkspace && IsConnected;
+
     public bool IsDashboardVisible =>
-    IsEmotix360Workspace && IsConnected;
+        IsEmotix360Workspace && IsConnected;
 
     public bool IsWorkspaceMessageVisible =>
         !IsDashboardVisible;
+
+    // ========================================================
+    // SOUNDNODE TELEMETRY
+    // ========================================================
+
+    public int SoundNodeRms =>
+        _soundNodeTelemetry?.Rms ?? 0;
+
+    public int SoundNodePeak =>
+        _soundNodeTelemetry?.Peak ?? 0;
+
+    public string SoundNodeRmsText =>
+        _soundNodeTelemetry?.Rms.ToString() ?? "--";
+
+    public string SoundNodePeakText =>
+        _soundNodeTelemetry?.Peak.ToString() ?? "--";
+
+    public string SoundNodeTemperatureText =>
+        _soundNodeTelemetry?.ChipTemperatureC is double temperature
+            ? $"{temperature:F1} °C"
+            : "Unavailable";
+
+    public bool HasSoundNodeTelemetry =>
+        _soundNodeTelemetry is not null;
+
+    public string SoundNodeTelemetryStatusText =>
+        HasSoundNodeTelemetry
+            ? "LIVE TELEMETRY"
+            : "WAITING FOR TELEMETRY";
 
     // ========================================================
     // LOADING STATE
@@ -184,9 +220,13 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
 
             SubscribeToConnectionManager();
 
+            UnsubscribeFromSessionStatus();
+
             _record = null;
             _session = null;
             _targetBluetoothDeviceId = null;
+
+            ClearSoundNodeTelemetry();
 
             IsConnected = false;
             IsLoading = true;
@@ -240,6 +280,10 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
 
             _record = null;
             _session = null;
+
+            UnsubscribeFromSessionStatus();
+            ClearSoundNodeTelemetry();
+
             _targetBluetoothDeviceId = null;
 
             IsConnected = false;
@@ -316,6 +360,94 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
     }
 
     // ========================================================
+    // SOUNDNODE STATUS NOTIFICATIONS
+    // ========================================================
+
+    private void OnSessionStatusPayloadReceived(
+        IDeviceSession session,
+        string payload)
+    {
+        if (!_isActive ||
+            !IsSoundNodeWorkspace ||
+            !ReferenceEquals(_session, session))
+        {
+            return;
+        }
+
+        // BLE notifications may arrive from a background thread.
+        // Update ViewModel properties on the main UI thread.
+        MainThread.BeginInvokeOnMainThread(
+            () =>
+            {
+                if (!_isActive ||
+                    !IsSoundNodeWorkspace ||
+                    !ReferenceEquals(_session, session))
+                {
+                    return;
+                }
+
+                ApplySoundNodeStatusPayload(payload);
+            }
+        );
+    }
+
+    private void ApplySoundNodeStatusPayload(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+            return;
+
+        if (!SoundNodeTelemetry.TryParse(
+            payload,
+            out SoundNodeTelemetry? telemetry) ||
+            telemetry is null)
+        {
+            Debug.WriteLine(
+                $"[SoundNode] Invalid telemetry payload: {payload}"
+            );
+
+            return;
+        }
+
+        _soundNodeTelemetry = telemetry;
+
+        OnPropertyChanged(nameof(SoundNodeRms));
+        OnPropertyChanged(nameof(SoundNodePeak));
+        OnPropertyChanged(nameof(SoundNodeRmsText));
+        OnPropertyChanged(nameof(SoundNodePeakText));
+        OnPropertyChanged(nameof(SoundNodeTemperatureText));
+        OnPropertyChanged(nameof(HasSoundNodeTelemetry));
+        OnPropertyChanged(nameof(SoundNodeTelemetryStatusText));
+
+        Debug.WriteLine(
+            $"[SoundNode] RMS={telemetry.Rms}, " +
+            $"PK={telemetry.Peak}, " +
+            $"TEMP={SoundNodeTemperatureText}"
+        );
+    }
+
+    private void ClearSoundNodeTelemetry()
+    {
+        _soundNodeTelemetry = null;
+
+        OnPropertyChanged(nameof(SoundNodeRms));
+        OnPropertyChanged(nameof(SoundNodePeak));
+        OnPropertyChanged(nameof(SoundNodeRmsText));
+        OnPropertyChanged(nameof(SoundNodePeakText));
+        OnPropertyChanged(nameof(SoundNodeTemperatureText));
+        OnPropertyChanged(nameof(HasSoundNodeTelemetry));
+        OnPropertyChanged(nameof(SoundNodeTelemetryStatusText));
+    }
+
+    private void UnsubscribeFromSessionStatus()
+    {
+        if (_session is null)
+            return;
+
+        _session.StatusPayloadReceived -=
+            OnSessionStatusPayloadReceived;
+    }
+
+    // ========================================================
     // RESOLVE THE CURRENT SESSION FOR THIS WORKSPACE
     // ========================================================
 
@@ -342,12 +474,36 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
             currentSession = null;
         }
 
-        _session = currentSession;
+        // Reconnect the status handler only when the session changes.
+        if (!ReferenceEquals(_session, currentSession))
+        {
+            UnsubscribeFromSessionStatus();
+
+            _session = currentSession;
+
+            ClearSoundNodeTelemetry();
+
+            // SoundNode owns its own telemetry parser and status handling.
+            if (_session is not null && IsSoundNodeWorkspace)
+            {
+                _session.StatusPayloadReceived +=
+                    OnSessionStatusPayloadReceived;
+            }
+        }
 
         IsConnected = currentSession?.IsConnected == true;
 
         if (IsConnected && currentSession is not null)
         {
+            // Process the most recent payload as well as future notifications.
+            // The initial BLE status may have arrived before this workspace opened.
+            if (IsSoundNodeWorkspace)
+            {
+                ApplySoundNodeStatusPayload(
+                    currentSession.LastStatusPayload
+                );
+            }
+
             // Select only the session belonging to this workspace.
             _sessionSelection.SetSelectedSession(currentSession);
 
@@ -362,6 +518,8 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
                 _sessionSelection.SetSelectedSession(null);
             }
 
+            ClearSoundNodeTelemetry();
+
             StatusMessage =
                 $"{DisplayName} is saved but currently offline.";
         }
@@ -375,6 +533,7 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
     {
         _isActive = false;
 
+        UnsubscribeFromSessionStatus();
         UnsubscribeFromConnectionManager();
     }
 
@@ -395,5 +554,7 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
         OnPropertyChanged(nameof(WorkspaceMessage));
         OnPropertyChanged(nameof(IsDashboardVisible));
         OnPropertyChanged(nameof(IsWorkspaceMessageVisible));
+        OnPropertyChanged(nameof(IsSoundNodeWorkspace));
+        OnPropertyChanged(nameof(IsSoundNodeDashboardVisible));
     }
 }

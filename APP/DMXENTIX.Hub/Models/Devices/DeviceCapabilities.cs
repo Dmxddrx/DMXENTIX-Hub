@@ -22,5 +22,7 @@ public enum DeviceCapabilities
 
     RemoteDiagnostics = 1 << 9,
 
-    AudioLevelTelemetry = 1 << 10
+    AudioLevelTelemetry = 1 << 10,
+
+    ChipTemperatureTelemetry = 1 << 11
 }

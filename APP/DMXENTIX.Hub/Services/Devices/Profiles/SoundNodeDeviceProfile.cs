@@ -24,7 +24,8 @@ public sealed class SoundNodeDeviceProfile : IDeviceProfile
         "DMXENTIX SoundNode";
 
     public DeviceCapabilities Capabilities =>
-        DeviceCapabilities.AudioLevelTelemetry;
+        DeviceCapabilities.AudioLevelTelemetry |
+        DeviceCapabilities.ChipTemperatureTelemetry;
 
     /// <summary>
     /// Identifies SoundNode using its advertised name and service UUID.
