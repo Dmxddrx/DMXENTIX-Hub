@@ -36,9 +36,12 @@ public partial class HomePage : ContentPage
     {
         Shell? shell = Shell.Current;
 
-        if (shell is not null)
-        {
-            await shell.GoToAsync("my-devices");
-        }
+        if (shell is null)
+            return;
+
+        // My Devices belongs to the Devices navigation section.
+        await shell.GoToAsync("//devices");
+
+        await shell.GoToAsync("my-devices");
     }
 }

@@ -272,6 +272,10 @@ public sealed class DeviceHubViewModel : ObservableObject
             RefreshConnectedSessions();
             RefreshDiscoveredDevices();
 
+            // Start a fresh discovery scan whenever
+            // the user returns to the Devices tab.
+            await ScanAsync(requestEnableWhenOff: false);
+
             return;
         }
 

@@ -7,30 +7,13 @@
     xmlns:views="clr-namespace:DMXENTIX.Hub.Views"
     Title="Device Workspace"
     BackgroundColor="#0B111B"
-    Shell.NavBarIsVisible="False"
-    Shell.TabBarIsVisible="False">
+    Shell.NavBarIsVisible="False">
 
     <ScrollView>
 
         <VerticalStackLayout
             Padding="22,26,22,30"
             Spacing="20">
-
-            <!-- ================================================= -->
-            <!-- NAVIGATION                                        -->
-            <!-- ================================================= -->
-
-            <Button
-                Text="BACK TO MY DEVICES"
-                Command="{Binding BackCommand}"
-                HorizontalOptions="Start"
-                BackgroundColor="#1A2E49"
-                TextColor="#9EC2FF"
-                FontAttributes="Bold"
-                FontSize="10"
-                Padding="14,9"
-                CornerRadius="10" />
-
 
             <!-- ================================================= -->
             <!-- HEADER                                            -->

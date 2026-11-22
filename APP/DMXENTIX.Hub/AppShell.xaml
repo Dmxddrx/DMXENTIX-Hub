@@ -6,24 +6,23 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     FlyoutBehavior="Disabled"
     Shell.NavBarIsVisible="False"
-    Shell.TabBarIsVisible="True">
+    Shell.TabBarIsVisible="True"
+    Shell.TabBarBackgroundColor="#101A29"
+    Shell.TabBarForegroundColor="#5796FF"
+    Shell.TabBarUnselectedColor="#8999AF">
 
     <TabBar>
 
-        <ShellContent
-            x:Name="DevicesShellContent"
-            Title="Devices"
-            Route="devices" />
-
+        <!-- Home is the application starting page. -->
         <ShellContent
             x:Name="HomeShellContent"
             Title="Home"
             Route="home" />
 
         <ShellContent
-            x:Name="DeviceShellContent"
-            Title="Device"
-            Route="device" />
+            x:Name="DevicesShellContent"
+            Title="Devices"
+            Route="devices" />
 
         <ShellContent
             x:Name="SettingsShellContent"
