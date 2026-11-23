@@ -78,6 +78,56 @@ public sealed class DeviceCardViewModel : ObservableObject
     public bool IsFavorite =>
         _record.IsFavorite;
 
+    private bool Supports(DeviceCapabilities capability) =>
+        (_record.Capabilities & capability) == capability;
+
+    public bool SupportsAnimationControl =>
+        Supports(DeviceCapabilities.AnimationControl);
+
+    public bool SupportsBrightnessControl =>
+        Supports(DeviceCapabilities.BrightnessControl);
+
+    public bool SupportsWifiProvisioning =>
+        Supports(DeviceCapabilities.WifiProvisioning);
+
+    public bool SupportsMotionTelemetry =>
+        Supports(DeviceCapabilities.MotionTelemetry);
+
+    public bool SupportsClockStatus =>
+        Supports(DeviceCapabilities.ClockStatus);
+
+    public bool SupportsTemperatureTelemetry =>
+        Supports(DeviceCapabilities.TemperatureTelemetry);
+
+    public bool SupportsHumidityTelemetry =>
+        Supports(DeviceCapabilities.HumidityTelemetry);
+
+    public bool SupportsDustTelemetry =>
+        Supports(DeviceCapabilities.DustTelemetry);
+
+    public bool SupportsSensorConfiguration =>
+        Supports(DeviceCapabilities.SensorConfiguration);
+
+    public bool SupportsRemoteDiagnostics =>
+        Supports(DeviceCapabilities.RemoteDiagnostics);
+
+    public bool SupportsAudioLevelTelemetry =>
+        Supports(DeviceCapabilities.AudioLevelTelemetry);
+
+    public bool SupportsChipTemperatureTelemetry =>
+        Supports(DeviceCapabilities.ChipTemperatureTelemetry);
+
+    public bool HasDeviceStatusCapabilities =>
+        SupportsAnimationControl ||
+        SupportsBrightnessControl ||
+        SupportsWifiProvisioning ||
+        SupportsMotionTelemetry ||
+        SupportsClockStatus;
+
+    public bool HasAudioTelemetryCapabilities =>
+        SupportsAudioLevelTelemetry ||
+        SupportsChipTemperatureTelemetry;
+
     public string FavoriteButtonText =>
         IsFavorite ? "FAVORITED" : "ADD FAVORITE";
 
@@ -506,8 +556,36 @@ public sealed class DeviceCardViewModel : ObservableObject
         OnPropertyChanged(nameof(AutoReconnectEnabled));
         OnPropertyChanged(nameof(AutoReconnectButtonText));
         OnPropertyChanged(nameof(AutoReconnectStatusText));
+        OnPropertyChanged(nameof(ProductSummary));
+        OnPropertyChanged(nameof(ProductDeviceType));
+        OnPropertyChanged(nameof(BluetoothTransportId));
+
+        NotifyCapabilityProperties();
+
+        OnPropertyChanged(nameof(AutoReconnectEnabled));
 
         NotifyConnectionProperties();
+    }
+
+    private void NotifyCapabilityProperties()
+    {
+        OnPropertyChanged(nameof(SupportsAnimationControl));
+        OnPropertyChanged(nameof(SupportsBrightnessControl));
+        OnPropertyChanged(nameof(SupportsWifiProvisioning));
+        OnPropertyChanged(nameof(SupportsMotionTelemetry));
+        OnPropertyChanged(nameof(SupportsClockStatus));
+
+        OnPropertyChanged(nameof(SupportsTemperatureTelemetry));
+        OnPropertyChanged(nameof(SupportsHumidityTelemetry));
+        OnPropertyChanged(nameof(SupportsDustTelemetry));
+        OnPropertyChanged(nameof(SupportsSensorConfiguration));
+        OnPropertyChanged(nameof(SupportsRemoteDiagnostics));
+
+        OnPropertyChanged(nameof(SupportsAudioLevelTelemetry));
+        OnPropertyChanged(nameof(SupportsChipTemperatureTelemetry));
+
+        OnPropertyChanged(nameof(HasDeviceStatusCapabilities));
+        OnPropertyChanged(nameof(HasAudioTelemetryCapabilities));
     }
 
     // ========================================================
@@ -587,45 +665,48 @@ public sealed class DeviceCardViewModel : ObservableObject
     private static string BuildProductSummary(
         DeviceRecord record)
     {
-        if (record.DeviceType == AppDeviceType.Emotix360)
-        {
-            List<string> features = [];
+        DeviceCapabilities capabilities = record.Capabilities;
 
-            if ((record.Capabilities &
-                 DeviceCapabilities.AnimationControl) != 0)
-            {
-                features.Add("Animation control");
-            }
+        List<string> features = [];
 
-            if ((record.Capabilities &
-                 DeviceCapabilities.BrightnessControl) != 0)
-            {
-                features.Add("Brightness control");
-            }
+        if ((capabilities & DeviceCapabilities.AnimationControl) != 0)
+            features.Add("Animation control");
 
-            if ((record.Capabilities &
-                 DeviceCapabilities.WifiProvisioning) != 0)
-            {
-                features.Add("Wi-Fi provisioning");
-            }
+        if ((capabilities & DeviceCapabilities.BrightnessControl) != 0)
+            features.Add("Brightness control");
 
-            if ((record.Capabilities &
-                 DeviceCapabilities.MotionTelemetry) != 0)
-            {
-                features.Add("Motion telemetry");
-            }
+        if ((capabilities & DeviceCapabilities.WifiProvisioning) != 0)
+            features.Add("Wi-Fi provisioning");
 
-            if ((record.Capabilities &
-                 DeviceCapabilities.ClockStatus) != 0)
-            {
-                features.Add("Clock status");
-            }
+        if ((capabilities & DeviceCapabilities.MotionTelemetry) != 0)
+            features.Add("Motion telemetry");
 
-            return features.Count > 0
-                ? string.Join(" · ", features)
-                : "EMOTIX360 interactive display";
-        }
+        if ((capabilities & DeviceCapabilities.ClockStatus) != 0)
+            features.Add("Clock status");
 
-        return $"{record.DeviceType} device";
+        if ((capabilities & DeviceCapabilities.TemperatureTelemetry) != 0)
+            features.Add("Temperature telemetry");
+
+        if ((capabilities & DeviceCapabilities.HumidityTelemetry) != 0)
+            features.Add("Humidity telemetry");
+
+        if ((capabilities & DeviceCapabilities.DustTelemetry) != 0)
+            features.Add("Dust telemetry");
+
+        if ((capabilities & DeviceCapabilities.SensorConfiguration) != 0)
+            features.Add("Sensor configuration");
+
+        if ((capabilities & DeviceCapabilities.RemoteDiagnostics) != 0)
+            features.Add("Remote diagnostics");
+
+        if ((capabilities & DeviceCapabilities.AudioLevelTelemetry) != 0)
+            features.Add("Audio level telemetry");
+
+        if ((capabilities & DeviceCapabilities.ChipTemperatureTelemetry) != 0)
+            features.Add("Chip temperature");
+
+        return features.Count > 0
+            ? string.Join(" · ", features)
+            : "No declared capabilities";
     }
 }

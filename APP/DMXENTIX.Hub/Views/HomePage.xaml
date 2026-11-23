@@ -139,7 +139,7 @@
                         <!-- ========================================= -->
 
                         <VerticalStackLayout
-                            IsVisible="{Binding IsEmotix360}"
+                            IsVisible="{Binding HasDeviceStatusCapabilities}"
                             Spacing="9">
 
                             <BoxView
@@ -155,13 +155,14 @@
 
                             <Grid
                                 ColumnDefinitions="*,*"
-                                RowDefinitions="Auto,Auto"
+                                RowDefinitions="Auto,Auto,Auto"
                                 ColumnSpacing="9"
                                 RowSpacing="9">
 
                                 <!-- Wi-Fi -->
 
                                 <Border
+                                    IsVisible="{Binding SupportsWifiProvisioning}"
                                     BackgroundColor="#192638"
                                     StrokeThickness="0"
                                     Padding="11">
@@ -190,6 +191,7 @@
                                 <!-- IMU -->
 
                                 <Border
+                                    IsVisible="{Binding SupportsMotionTelemetry}"
                                     Grid.Column="1"
                                     BackgroundColor="#192638"
                                     StrokeThickness="0"
@@ -219,6 +221,7 @@
                                 <!-- Animation -->
 
                                 <Border
+                                    IsVisible="{Binding SupportsAnimationControl}"
                                     Grid.Row="1"
                                     BackgroundColor="#192638"
                                     StrokeThickness="0"
@@ -248,6 +251,7 @@
                                 <!-- Brightness -->
 
                                 <Border
+                                    IsVisible="{Binding SupportsBrightnessControl}"
                                     Grid.Row="1"
                                     Grid.Column="1"
                                     BackgroundColor="#192638"
@@ -275,11 +279,42 @@
 
                                 </Border>
 
+                                <!-- Clock -->
+
+                                <Border
+                                    Grid.Row="2"
+                                    BackgroundColor="#192638"
+                                    StrokeThickness="0"
+                                    Padding="11"
+                                    IsVisible="{Binding SupportsClockStatus}">
+
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="11" />
+                                    </Border.StrokeShape>
+
+                                    <VerticalStackLayout Spacing="4">
+
+                                        <Label
+                                            Text="CLOCK"
+                                            FontSize="9"
+                                            TextColor="#8999AF" />
+
+                                        <Label
+                                            Text="{Binding TimeStatusText}"
+                                            FontSize="13"
+                                            FontAttributes="Bold"
+                                            TextColor="#E0EAF8" />
+
+                                    </VerticalStackLayout>
+
+                                </Border>
+
                             </Grid>
 
                             <!-- Motion information -->
 
                             <Label
+                                IsVisible="{Binding SupportsMotionTelemetry}"
                                 Text="{Binding MotionSummaryText}"
                                 FontSize="11"
                                 TextColor="#AAB8CB" />
@@ -295,7 +330,7 @@
                         <!-- ========================================= -->
 
                         <VerticalStackLayout
-                            IsVisible="{Binding IsSoundNode}"
+                            IsVisible="{Binding HasAudioTelemetryCapabilities}"
                             Spacing="9">
 
                             <BoxView
@@ -316,6 +351,7 @@
                                 <!-- RMS -->
 
                                 <Border
+                                    IsVisible="{Binding SupportsAudioLevelTelemetry}"
                                     BackgroundColor="#192638"
                                     StrokeThickness="0"
                                     Padding="10">
@@ -344,6 +380,7 @@
                                 <!-- Peak -->
 
                                 <Border
+                                    IsVisible="{Binding SupportsAudioLevelTelemetry}"
                                     Grid.Column="1"
                                     BackgroundColor="#192638"
                                     StrokeThickness="0"
@@ -373,6 +410,7 @@
                                 <!-- Temperature -->
 
                                 <Border
+                                    IsVisible="{Binding SupportsChipTemperatureTelemetry}"
                                     Grid.Column="2"
                                     BackgroundColor="#192638"
                                     StrokeThickness="0"

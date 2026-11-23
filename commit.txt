@@ -1,27 +1,2 @@
-**Commit message:**
-
-```text
-feat(soundnode): add ESP32-C3 MAX9814 BLE firmware
-```
-
-**Commit description:**
-
-```text
-Add DMXENTIX SoundNode as a separate ESP32-C3 PlatformIO firmware project.
-
-- Establish layered firmware architecture for SoundNode.
-- Add MAX9814 microphone driver using ESP32-C3 ADC.
-- Implement 8 kHz audio sampling and RMS/peak processing.
-- Add NimBLE-Arduino 2.5.2 BLE GATT server.
-- Define unique SoundNode service and characteristic UUIDs.
-- Advertise device as DMXENTIX-SOUND.
-- Implement BLE command handling with PING/PONG response.
-- Add automatic BLE advertising restart after disconnection.
-- Add hardware wiring and firmware setup documentation.
-- Correct NimBLE-Arduino 2.5.2 callback signatures and registration.
-
-Validation:
-- PlatformIO firmware build completed without errors.
-- Firmware successfully uploaded to ESP32-C3.
-- DMXENTIX Hub successfully discovers DMXENTIX-SOUND.
-```
+APP: Recommendation 1 — Capability-driven UI
+Step 1A — Make Home device cards capability-driven
