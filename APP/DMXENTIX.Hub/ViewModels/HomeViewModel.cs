@@ -31,18 +31,15 @@ public sealed class HomeViewModel : ObservableObject
     private DeviceCardViewModel? _selectedInfoCard;
     private bool _isInfoPopupVisible;
     private readonly BluetoothService _bluetooth;
-    private readonly DeviceCommandService _deviceCommandService;
 
     public HomeViewModel(
         DeviceRegistryService deviceRegistry,
         BleConnectionManager connectionManager,
-        BluetoothService bluetooth,
-        DeviceCommandService deviceCommandService)
+        BluetoothService bluetooth)
     {
         _deviceRegistry = deviceRegistry;
         _connectionManager = connectionManager;
         _bluetooth = bluetooth;
-        _deviceCommandService = deviceCommandService;
 
         OpenWorkspaceCommand = new Command<DeviceCardViewModel>(
             async card => await OpenWorkspaceAsync(card),
@@ -297,8 +294,7 @@ public sealed class HomeViewModel : ObservableObject
             {
                 card = new DeviceCardViewModel(
                     entry.Record,
-                    entry.Session,
-                    _deviceCommandService
+                    entry.Session
                 );
 
                 _cardsByDeviceId.Add(

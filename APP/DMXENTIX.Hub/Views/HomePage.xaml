@@ -4,7 +4,6 @@
     x:Class="DMXENTIX.Hub.Views.HomePage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    xmlns:models="clr-namespace:DMXENTIX.Hub.Models"
     Title="Home"
     BackgroundColor="#0B111B"
     Shell.NavBarIsVisible="False">
@@ -285,187 +284,6 @@
                                 FontSize="11"
                                 TextColor="#AAB8CB" />
 
-                            <!-- ========================================= -->
-                            <!-- EMOTIX360 QUICK CONTROLS                  -->
-                            <!-- ========================================= -->
-
-                            <Border
-                                BackgroundColor="#192638"
-                                Stroke="#314968"
-                                StrokeThickness="1"
-                                Padding="13">
-
-                                <Border.StrokeShape>
-                                    <RoundRectangle CornerRadius="13" />
-                                </Border.StrokeShape>
-
-                                <VerticalStackLayout Spacing="12">
-
-                                    <Label
-                                        Text="QUICK CONTROLS"
-                                        FontSize="10"
-                                        CharacterSpacing="1.3"
-                                        FontAttributes="Bold"
-                                        TextColor="#91A4BF" />
-
-                                    <!-- Animation mode selection -->
-
-                                    <Label
-                                        Text="ANIMATION MODE"
-                                        FontSize="9"
-                                        FontAttributes="Bold"
-                                        TextColor="#8999AF" />
-
-                                    <FlexLayout
-                                        Direction="Row"
-                                        Wrap="Wrap"
-                                        JustifyContent="Start"
-                                        AlignItems="Center">
-
-                                        <Button
-                                            Text="IDLE"
-                                            Command="{Binding SetAnimationModeCommand}"
-                                            CommandParameter="{x:Static models:AnimationMode.Idle}"
-                                            IsEnabled="{Binding CanUseDeviceControls}"
-                                            BackgroundColor="#263C58"
-                                            TextColor="#DCE8F8"
-                                            FontSize="9"
-                                            Padding="11,7"
-                                            Margin="0,0,7,7"
-                                            CornerRadius="8" />
-
-                                        <Button
-                                            Text="SAND CLOCK"
-                                            Command="{Binding SetAnimationModeCommand}"
-                                            CommandParameter="{x:Static models:AnimationMode.SandClock}"
-                                            IsEnabled="{Binding CanUseDeviceControls}"
-                                            BackgroundColor="#263C58"
-                                            TextColor="#DCE8F8"
-                                            FontSize="9"
-                                            Padding="11,7"
-                                            Margin="0,0,7,7"
-                                            CornerRadius="8" />
-
-                                        <Button
-                                            Text="WATER"
-                                            Command="{Binding SetAnimationModeCommand}"
-                                            CommandParameter="{x:Static models:AnimationMode.Water}"
-                                            IsEnabled="{Binding CanUseDeviceControls}"
-                                            BackgroundColor="#263C58"
-                                            TextColor="#DCE8F8"
-                                            FontSize="9"
-                                            Padding="11,7"
-                                            Margin="0,0,7,7"
-                                            CornerRadius="8" />
-
-                                        <Button
-                                            Text="SAND GRAVITY"
-                                            Command="{Binding SetAnimationModeCommand}"
-                                            CommandParameter="{x:Static models:AnimationMode.SandGravity}"
-                                            IsEnabled="{Binding CanUseDeviceControls}"
-                                            BackgroundColor="#263C58"
-                                            TextColor="#DCE8F8"
-                                            FontSize="9"
-                                            Padding="11,7"
-                                            Margin="0,0,7,7"
-                                            CornerRadius="8" />
-
-                                        <Button
-                                            Text="HEART"
-                                            Command="{Binding SetAnimationModeCommand}"
-                                            CommandParameter="{x:Static models:AnimationMode.Heart}"
-                                            IsEnabled="{Binding CanUseDeviceControls}"
-                                            BackgroundColor="#263C58"
-                                            TextColor="#DCE8F8"
-                                            FontSize="9"
-                                            Padding="11,7"
-                                            Margin="0,0,7,7"
-                                            CornerRadius="8" />
-
-                                        <Button
-                                            Text="RAIN"
-                                            Command="{Binding SetAnimationModeCommand}"
-                                            CommandParameter="{x:Static models:AnimationMode.Rain}"
-                                            IsEnabled="{Binding CanUseDeviceControls}"
-                                            BackgroundColor="#263C58"
-                                            TextColor="#DCE8F8"
-                                            FontSize="9"
-                                            Padding="11,7"
-                                            Margin="0,0,7,7"
-                                            CornerRadius="8" />
-
-                                        <Button
-                                            Text="WAVES"
-                                            Command="{Binding SetAnimationModeCommand}"
-                                            CommandParameter="{x:Static models:AnimationMode.Waves}"
-                                            IsEnabled="{Binding CanUseDeviceControls}"
-                                            BackgroundColor="#263C58"
-                                            TextColor="#DCE8F8"
-                                            FontSize="9"
-                                            Padding="11,7"
-                                            Margin="0,0,7,7"
-                                            CornerRadius="8" />
-
-                                    </FlexLayout>
-
-                                    <BoxView
-                                        HeightRequest="1"
-                                        Color="#31445E" />
-
-                                    <!-- Brightness control -->
-
-                                    <Grid ColumnDefinitions="*,Auto">
-
-                                        <Label
-                                            Text="BRIGHTNESS"
-                                            FontSize="9"
-                                            FontAttributes="Bold"
-                                            TextColor="#8999AF"
-                                            VerticalOptions="Center" />
-
-                                        <Label
-                                            Grid.Column="1"
-                                            Text="{Binding BrightnessControlValueText}"
-                                            FontSize="11"
-                                            FontAttributes="Bold"
-                                            TextColor="#9EC2FF"
-                                            VerticalOptions="Center" />
-
-                                    </Grid>
-
-                                    <Slider
-                                        Minimum="0"
-                                        Maximum="15"
-                                        Value="{Binding BrightnessControlValue, Mode=TwoWay}"
-                                        IsEnabled="{Binding CanUseDeviceControls}"
-                                        MinimumTrackColor="#5796FF"
-                                        MaximumTrackColor="#33465F"
-                                        ThumbColor="#9EC2FF" />
-
-                                    <Button
-                                        Text="APPLY BRIGHTNESS"
-                                        Command="{Binding ApplyBrightnessCommand}"
-                                        IsEnabled="{Binding CanApplyBrightness}"
-                                        BackgroundColor="#397FE8"
-                                        TextColor="White"
-                                        FontSize="10"
-                                        FontAttributes="Bold"
-                                        HeightRequest="39"
-                                        CornerRadius="9" />
-
-                                    <!-- Command error feedback -->
-
-                                    <Label
-                                        Text="{Binding DeviceControlErrorMessage}"
-                                        IsVisible="{Binding HasDeviceControlError}"
-                                        FontSize="10"
-                                        TextColor="#F2A7B1"
-                                        LineBreakMode="WordWrap" />
-
-                                </VerticalStackLayout>
-
-                            </Border>
-
                             <!-- Wi-Fi configuration will be linked
                                  to the provisioning interface in Step 3. -->
 
@@ -642,47 +460,47 @@
     <!-- ===================================================== -->
     <!-- HOME CONTENT                                          -->
     <!-- ===================================================== -->
-<Grid>
+    <Grid>
         <ScrollView>
 
-        <VerticalStackLayout
+            <VerticalStackLayout
             Padding="22,24,22,28"
             Spacing="22">
 
 
-            <!-- ================================================= -->
-            <!-- HEADER                                            -->
-            <!-- ================================================= -->
+                <!-- ================================================= -->
+                <!-- HEADER                                            -->
+                <!-- ================================================= -->
 
-            <Grid
+                <Grid
                 ColumnDefinitions="*,Auto"
                 ColumnSpacing="12">
 
-                <VerticalStackLayout
+                    <VerticalStackLayout
                     Spacing="5"
                     VerticalOptions="Center">
 
-                    <Label
+                        <Label
                         Text="DMXENTIX"
                         FontSize="11"
                         CharacterSpacing="2.5"
                         FontAttributes="Bold"
                         TextColor="#5796FF" />
 
-                    <Label
+                        <Label
                         Text="Device Hub"
                         FontSize="32"
                         FontAttributes="Bold"
                         TextColor="#F2F5FC" />
 
-                    <Label
+                        <Label
                         Text="Your connected engineering ecosystem."
                         FontSize="12"
                         TextColor="#8999AF" />
 
-                </VerticalStackLayout>
+                    </VerticalStackLayout>
 
-                <Button
+                    <Button
                     Grid.Column="1"
                     Text="FIND DEVICE"
                     Clicked="OnFindDeviceClicked"
@@ -694,41 +512,41 @@
                     CornerRadius="12"
                     VerticalOptions="Center" />
 
-            </Grid>
+                </Grid>
 
 
-            <!-- ================================================= -->
-            <!-- STATUS MESSAGE                                    -->
-            <!-- ================================================= -->
+                <!-- ================================================= -->
+                <!-- STATUS MESSAGE                                    -->
+                <!-- ================================================= -->
 
-            <Border
+                <Border
                 IsVisible="{Binding HasStatusMessage}"
                 BackgroundColor="#3A2029"
                 Stroke="#60404A"
                 StrokeThickness="1"
                 Padding="12">
 
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="11" />
-                </Border.StrokeShape>
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="11" />
+                    </Border.StrokeShape>
 
-                <Label
+                    <Label
                     Text="{Binding StatusMessage}"
                     FontSize="11"
                     TextColor="#F2C4CC" />
 
-            </Border>
+                </Border>
 
 
-            <!-- ================================================= -->
-            <!-- CONNECTED DEVICES                                 -->
-            <!-- ================================================= -->
+                <!-- ================================================= -->
+                <!-- CONNECTED DEVICES                                 -->
+                <!-- ================================================= -->
 
-            <VerticalStackLayout Spacing="13">
+                <VerticalStackLayout Spacing="13">
 
-                <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto">
 
-                    <Label
+                        <Label
                         Text="CONNECTED DEVICES"
                         FontSize="12"
                         CharacterSpacing="1.3"
@@ -736,7 +554,7 @@
                         TextColor="#DFE7F3"
                         VerticalOptions="Center" />
 
-                    <Label
+                        <Label
                         Grid.Column="1"
                         Text="{Binding ConnectedDeviceCountText}"
                         FontSize="10"
@@ -744,36 +562,36 @@
                         TextColor="#72C9A0"
                         VerticalOptions="Center" />
 
-                </Grid>
+                    </Grid>
 
-                <!-- Empty connected-device state -->
+                    <!-- Empty connected-device state -->
 
-                <Border
+                    <Border
                     IsVisible="{Binding HasNoConnectedDevices}"
                     BackgroundColor="#142135"
                     Stroke="#263C58"
                     StrokeThickness="1"
                     Padding="18">
 
-                    <Border.StrokeShape>
-                        <RoundRectangle CornerRadius="16" />
-                    </Border.StrokeShape>
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="16" />
+                        </Border.StrokeShape>
 
-                    <VerticalStackLayout Spacing="9">
+                        <VerticalStackLayout Spacing="9">
 
-                        <Label
+                            <Label
                             Text="No connected devices"
                             FontSize="17"
                             FontAttributes="Bold"
                             TextColor="#F2F5FC" />
 
-                        <Label
+                            <Label
                             Text="Use Find Device to scan for and connect your supported devices."
                             FontSize="12"
                             TextColor="#8999AF"
                             LineBreakMode="WordWrap" />
 
-                        <Button
+                            <Button
                             Text="FIND DEVICE"
                             Clicked="OnFindDeviceClicked"
                             BackgroundColor="#397FE8"
@@ -783,32 +601,32 @@
                             HeightRequest="44"
                             CornerRadius="11" />
 
-                    </VerticalStackLayout>
+                        </VerticalStackLayout>
 
-                </Border>
+                    </Border>
 
 
-                <!-- Connected device cards -->
+                    <!-- Connected device cards -->
 
-                <VerticalStackLayout
+                    <VerticalStackLayout
                     BindableLayout.ItemsSource="{Binding ConnectedDevices}"
                     BindableLayout.ItemTemplate="{StaticResource HomeDeviceCardTemplate}"
                     Spacing="12" />
 
-            </VerticalStackLayout>
+                </VerticalStackLayout>
 
 
-            <!-- ================================================= -->
-            <!-- OFFLINE FAVOURITES                                -->
-            <!-- ================================================= -->
+                <!-- ================================================= -->
+                <!-- OFFLINE FAVOURITES                                -->
+                <!-- ================================================= -->
 
-            <VerticalStackLayout
+                <VerticalStackLayout
                 IsVisible="{Binding HasFavoriteDevices}"
                 Spacing="13">
 
-                <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto">
 
-                    <Label
+                        <Label
                         Text="FAVOURITES"
                         FontSize="12"
                         CharacterSpacing="1.3"
@@ -816,7 +634,7 @@
                         TextColor="#DFE7F3"
                         VerticalOptions="Center" />
 
-                    <Label
+                        <Label
                         Grid.Column="1"
                         Text="{Binding FavoriteDeviceCountText}"
                         FontSize="10"
@@ -824,30 +642,30 @@
                         TextColor="#F4CA72"
                         VerticalOptions="Center" />
 
-                </Grid>
+                    </Grid>
 
-                <Label
+                    <Label
                     Text="Your saved favourite devices, including those currently offline."
                     FontSize="11"
                     TextColor="#8999AF" />
 
-                <VerticalStackLayout
+                    <VerticalStackLayout
                     BindableLayout.ItemsSource="{Binding FavoriteDevices}"
                     BindableLayout.ItemTemplate="{StaticResource HomeDeviceCardTemplate}"
                     Spacing="12" />
 
+                </VerticalStackLayout>
+
             </VerticalStackLayout>
 
-        </VerticalStackLayout>
-
-    </ScrollView>
+        </ScrollView>
 
 
-    <!-- ================================================= -->
-    <!-- DEVICE INFORMATION POPUP                          -->
-    <!-- ================================================= -->
+        <!-- ================================================= -->
+        <!-- DEVICE INFORMATION POPUP                          -->
+        <!-- ================================================= -->
 
-    <Grid
+        <Grid
     IsVisible="{Binding IsInfoPopupVisible}"
     ZIndex="20">
 
@@ -1062,10 +880,10 @@
 
             </Border>
 
-     </Grid>
+        </Grid>
 
 
-</Grid>
-    
+    </Grid>
+
 
 </ContentPage>
