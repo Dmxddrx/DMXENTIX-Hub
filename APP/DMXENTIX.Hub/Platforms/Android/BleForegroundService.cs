@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui;
 using System.Runtime.Versioning;
 using Debug = System.Diagnostics.Debug;
+using DMXENTIX.Hub.Services.Bluetooth;
 
 namespace DMXENTIX.Hub.Platforms.Android;
 
@@ -17,6 +18,30 @@ internal static class BleForegroundServiceController
 {
     private static readonly object SyncLock = new();
     private static bool _isStarted;
+
+    public static bool IsStarted
+    {
+        get
+        {
+            lock (SyncLock)
+            {
+                return _isStarted;
+            }
+        }
+    }
+
+    internal static void RefreshNotification()
+    {
+        BleForegroundService.RefreshCurrentNotification();
+    }
+
+    internal static void NotifyServiceStarted()
+    {
+        lock (SyncLock)
+        {
+            _isStarted = true;
+        }
+    }
 
     public static void Start()
     {
@@ -106,7 +131,7 @@ internal static class BleForegroundServiceController
 public sealed class BleForegroundService : Service
 {
     private const string CHANNEL_ID =
-        "emotix360_ble_connection";
+        "dmxentix_hub_ble_connection";
 
     private const int NOTIFICATION_ID = 3601;
 
@@ -120,6 +145,8 @@ public sealed class BleForegroundService : Service
         StartCommandFlags flags,
         int startId)
     {
+        BleForegroundServiceController.NotifyServiceStarted();
+
         if (OperatingSystem.IsAndroidVersionAtLeast(26))
         {
             CreateNotificationChannel();
@@ -145,25 +172,20 @@ public sealed class BleForegroundService : Service
             );
         }
 
-        // Android can recreate a sticky foreground service after
-        // the app process has been terminated by the system.
-        // In that case, Android supplies a null start Intent.
-        //
-        // Restore the existing BLE auto-connect manager using
-        // the MAUI dependency injection container.
+        // Android can recreate the sticky foreground service after
+        // terminating the app process. Restore all eligible saved devices.
         if (intent is null)
         {
             try
             {
-                BluetoothService? bluetoothService =
+                DeviceConnectionSupervisor? supervisor =
                     IPlatformApplication.Current?
-                        .Services.GetService<BluetoothService>();
+                        .Services.GetService<DeviceConnectionSupervisor>();
 
-                bluetoothService?
-                    .ResumeAutoConnectFromForegroundService();
+                supervisor?.ResumeFromForegroundService();
 
                 Debug.WriteLine(
-                    "[BLE] Auto-connect manager restored by foreground service."
+                    "[BLE] Multi-device connection supervisor restored."
                 );
             }
             catch (Exception ex)
@@ -191,19 +213,109 @@ public sealed class BleForegroundService : Service
 
         NotificationChannel channel = new NotificationChannel(
             CHANNEL_ID,
-            "EMOTIX360 BLE Connection",
+            "DMXENTIX Hub BLE Connection",
             NotificationImportance.Low
         )
         {
             Description =
-                "Maintains the Bluetooth connection and automatic reconnection."
+                "Maintains connections and automatic reconnection for saved DMXENTIX devices."
         };
 
         manager.CreateNotificationChannel(channel);
     }
 
+    private static WeakReference<BleForegroundService>?
+        _currentInstance;
+
+    public override void OnCreate()
+    {
+        base.OnCreate();
+
+        _currentInstance = new WeakReference<BleForegroundService>(
+            this
+        );
+    }
+
+    internal static void RefreshCurrentNotification()
+    {
+        if (_currentInstance is not null &&
+            _currentInstance.TryGetTarget(
+                out BleForegroundService? service))
+        {
+            service.RefreshNotification();
+        }
+    }
+
+    private void RefreshNotification()
+    {
+        NotificationManager? manager =
+            GetSystemService(NotificationService) as NotificationManager;
+
+        manager?.Notify(
+            NOTIFICATION_ID,
+            BuildNotification()
+        );
+    }
+
     private Notification BuildNotification()
     {
+        IServiceProvider? services =
+            IPlatformApplication.Current?.Services;
+
+        BleConnectionManager? connectionManager =
+            services?.GetService<BleConnectionManager>();
+
+        DeviceConnectionSupervisor? supervisor =
+            services?.GetService<DeviceConnectionSupervisor>();
+
+        BleCentralService? bleCentral =
+            services?.GetService<BleCentralService>();
+
+        int connectedCount =
+            connectionManager?.ConnectedSessionCount ?? 0;
+
+        int reconnectingCount =
+            supervisor?.ActiveReconnectCount ?? 0;
+
+        int autoReconnectCount =
+            supervisor?.AutoReconnectDeviceCount ?? 0;
+
+        bool bluetoothOn =
+            bleCentral?.IsBluetoothOn ?? true;
+
+        string statusText;
+
+        if (!bluetoothOn && autoReconnectCount > 0)
+        {
+            statusText =
+                $"Bluetooth off. Waiting for {autoReconnectCount} saved device(s).";
+        }
+        else if (connectedCount > 0 && reconnectingCount > 0)
+        {
+            statusText =
+                $"{connectedCount} connected · {reconnectingCount} reconnecting";
+        }
+        else if (reconnectingCount > 0)
+        {
+            statusText =
+                $"Reconnecting {reconnectingCount} saved device(s).";
+        }
+        else if (connectedCount > 0)
+        {
+            statusText =
+                $"Monitoring {connectedCount} active BLE connection(s).";
+        }
+        else if (autoReconnectCount > 0)
+        {
+            statusText =
+                $"Monitoring {autoReconnectCount} saved device(s).";
+        }
+        else
+        {
+            statusText =
+                "Bluetooth connection management is active.";
+        }
+
         Intent launchIntent = new Intent(
             this,
             typeof(global::DMXENTIX.Hub.MainActivity)
@@ -237,10 +349,8 @@ public sealed class BleForegroundService : Service
         }
 
         return builder
-            .SetContentTitle("EMOTIX360")
-            .SetContentText(
-                "Bluetooth connection monitoring is active."
-            )
+            .SetContentTitle("DMXENTIX Hub")
+            .SetContentText(statusText)
             .SetSmallIcon(
                 global::Android.Resource.Drawable.IcDialogInfo
             )
@@ -253,6 +363,14 @@ public sealed class BleForegroundService : Service
 
     public override void OnDestroy()
     {
+        if (_currentInstance is not null &&
+            _currentInstance.TryGetTarget(
+                out BleForegroundService? current) &&
+            ReferenceEquals(current, this))
+        {
+            _currentInstance = null;
+        }
+
         BleForegroundServiceController.NotifyServiceStopped();
 
         base.OnDestroy();

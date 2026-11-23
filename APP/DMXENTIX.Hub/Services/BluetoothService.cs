@@ -294,7 +294,7 @@ public sealed class BluetoothService
             await StopScanAsync();
 
 #if ANDROID
-            BleForegroundServiceController.Start();
+            _connectionSupervisor.EnsureForegroundServiceRunning();
 #endif
 
             try
@@ -331,7 +331,7 @@ public sealed class BluetoothService
 #if ANDROID
                 if (_connectionManager.ConnectedSessionCount == 0)
                 {
-                    BleForegroundServiceController.Stop();
+                    _connectionSupervisor.UpdateForegroundServiceLifecycle();
                 }
 #endif
                 throw;
@@ -377,7 +377,7 @@ public sealed class BluetoothService
             await StopScanAsync();
 
 #if ANDROID
-            BleForegroundServiceController.Start();
+            _connectionSupervisor.EnsureForegroundServiceRunning();
 #endif
 
             try
@@ -416,7 +416,7 @@ public sealed class BluetoothService
 #if ANDROID
                 if (_connectionManager.ConnectedSessionCount == 0)
                 {
-                    BleForegroundServiceController.Stop();
+                    _connectionSupervisor.UpdateForegroundServiceLifecycle();
                 }
 #endif
                 throw;
@@ -463,7 +463,7 @@ public sealed class BluetoothService
             // device session remains connected.
             if (_connectionManager.ConnectedSessionCount == 0)
             {
-                BleForegroundServiceController.Stop();
+                _connectionSupervisor.UpdateForegroundServiceLifecycle();
             }
 #endif
         }
@@ -526,7 +526,7 @@ public sealed class BluetoothService
             // device remains connected.
             if (_connectionManager.ConnectedSessionCount == 0)
             {
-                BleForegroundServiceController.Stop();
+                _connectionSupervisor.UpdateForegroundServiceLifecycle();
             }
 #endif
         }

@@ -4,6 +4,9 @@ using System.Diagnostics;
 using DMXENTIX.Hub.Models.Devices;
 using DMXENTIX.Hub.Services.Devices;
 using DMXENTIX.Hub.Services;
+#if ANDROID
+using DMXENTIX.Hub.Platforms.Android;
+#endif
 
 namespace DMXENTIX.Hub.Services.Bluetooth;
 
@@ -43,6 +46,7 @@ public sealed class DeviceConnectionSupervisor
 
     private volatile bool _started;
     private bool _permissionsGranted;
+    private int _autoReconnectDeviceCount;
 
     public DeviceConnectionSupervisor(
         DeviceRegistryService deviceRegistry,
@@ -72,6 +76,82 @@ public sealed class DeviceConnectionSupervisor
 
     public bool IsReconnecting =>
         !_reconnectTasks.IsEmpty;
+
+    public int ActiveReconnectCount =>
+        _reconnectTasks.Count;
+
+    public int AutoReconnectDeviceCount =>
+        Volatile.Read(ref _autoReconnectDeviceCount);
+
+    // ========================================================
+    // ANDROID FOREGROUND SERVICE LIFECYCLE
+    // ========================================================
+
+    /// <summary>
+    /// Starts the foreground service before a manual BLE connection.
+    /// </summary>
+    public void EnsureForegroundServiceRunning()
+    {
+#if ANDROID
+        BleForegroundServiceController.Start();
+#endif
+    }
+
+    /// <summary>
+    /// Keeps Android's foreground service active while connections
+    /// or eligible automatic reconnection tasks need supervision.
+    /// </summary>
+    public void UpdateForegroundServiceLifecycle()
+    {
+#if ANDROID
+        bool shouldRun =
+            _connectionManager.ConnectedSessionCount > 0 ||
+            AutoReconnectDeviceCount > 0 ||
+            ActiveReconnectCount > 0;
+
+        if (!shouldRun)
+        {
+            BleForegroundServiceController.Stop();
+            return;
+        }
+
+        if (BleForegroundServiceController.IsStarted)
+        {
+            BleForegroundServiceController.RefreshNotification();
+        }
+        else
+        {
+            BleForegroundServiceController.Start();
+        }
+#endif
+    }
+
+    // ========================================================
+    // FOREGROUND SERVICE RECOVERY
+    // ========================================================
+
+    public void ResumeFromForegroundService()
+    {
+        _ = ResumeFromForegroundServiceAsync();
+    }
+
+    private async Task ResumeFromForegroundServiceAsync()
+    {
+        try
+        {
+            await StartAsync();
+
+            Debug.WriteLine(
+                "[ConnectionSupervisor] Restored after foreground service restart."
+            );
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[ConnectionSupervisor] Foreground recovery failed: {ex.Message}"
+            );
+        }
+    }
 
     // ========================================================
     // START SUPERVISOR
@@ -127,6 +207,8 @@ public sealed class DeviceConnectionSupervisor
         }
 
         StopReconnectLoop(deviceId);
+
+        _ = ReconcileSafelyAsync();
 
         Debug.WriteLine(
             $"[ConnectionSupervisor] Manual disconnect requested: {deviceId}"
@@ -191,16 +273,50 @@ public sealed class DeviceConnectionSupervisor
             if (!_started)
                 return;
 
-            if (!_bleCentral.IsBluetoothOn)
-            {
-                StopAllReconnectLoops();
-                return;
-            }
-
             IReadOnlyList<DeviceRecord> savedDevices =
                 await _deviceRegistry.GetDevicesAsync(
                     cancellationToken
                 );
+
+            // Count saved devices that are eligible for automatic reconnection.
+            int autoReconnectDeviceCount = 0;
+
+            foreach (DeviceRecord record in savedDevices)
+            {
+                if (!record.AutoReconnectEnabled)
+                    continue;
+
+                if (!Guid.TryParse(
+                        record.BluetoothDeviceId,
+                        out Guid bluetoothDeviceId))
+                {
+                    continue;
+                }
+
+                if (IsManualDisconnectSuppressed(bluetoothDeviceId))
+                    continue;
+
+                autoReconnectDeviceCount++;
+            }
+
+            Volatile.Write(
+                ref _autoReconnectDeviceCount,
+                autoReconnectDeviceCount
+            );
+
+            // Update the Android service before starting connection attempts.
+            UpdateForegroundServiceLifecycle();
+
+            if (!_bleCentral.IsBluetoothOn)
+            {
+                StopAllReconnectLoops();
+
+                // Keep the service running when eligible devices are waiting
+                // for Bluetooth to become available again.
+                UpdateForegroundServiceLifecycle();
+
+                return;
+            }
 
             Dictionary<Guid, DeviceRecord> eligibleDevices = new();
 
@@ -262,6 +378,9 @@ public sealed class DeviceConnectionSupervisor
                 ProgressChanged?.Invoke(
                     "Bluetooth permission is required for automatic reconnection."
                 );
+
+                Volatile.Write(ref _autoReconnectDeviceCount, 0);
+                UpdateForegroundServiceLifecycle();
 
                 return;
             }
@@ -456,6 +575,9 @@ public sealed class DeviceConnectionSupervisor
         }
         finally
         {
+            bool wasCancelled =
+                cancellationToken.IsCancellationRequested;
+
             if (_reconnectTasks.TryGetValue(
                     bluetoothDeviceId,
                     out CancellationTokenSource? currentSource) &&
@@ -468,6 +590,15 @@ public sealed class DeviceConnectionSupervisor
             }
 
             source.Dispose();
+
+            UpdateForegroundServiceLifecycle();
+
+            // Reconcile again after cancellation. This handles a quick
+            // OFF -> ON preference change while an old worker was stopping.
+            if (wasCancelled && _started)
+            {
+                _ = ReconcileSafelyAsync();
+            }
         }
     }
 
@@ -628,6 +759,8 @@ public sealed class DeviceConnectionSupervisor
             // A successful connection makes its retry worker unnecessary.
             StopReconnectLoop(session.DeviceId);
 
+            UpdateForegroundServiceLifecycle();
+
             _ = UpdateLastConnectedAsync(session);
 
             return;
@@ -684,7 +817,7 @@ public sealed class DeviceConnectionSupervisor
 
     private void StopReconnectLoop(Guid bluetoothDeviceId)
     {
-        if (!_reconnectTasks.TryRemove(
+        if (!_reconnectTasks.TryGetValue(
                 bluetoothDeviceId,
                 out CancellationTokenSource? source))
         {
@@ -693,12 +826,18 @@ public sealed class DeviceConnectionSupervisor
 
         try
         {
-            source.Cancel();
+            if (!source.IsCancellationRequested)
+            {
+                source.Cancel();
+            }
         }
         catch (ObjectDisposedException)
         {
             // Worker has already completed.
         }
+
+        // Do not remove the worker here.
+        // Its own finally block removes it after cleanup completes.
     }
 
     private void StopAllReconnectLoops()
@@ -744,6 +883,9 @@ public sealed class DeviceConnectionSupervisor
         if (!isOn)
         {
             StopAllReconnectLoops();
+
+            UpdateForegroundServiceLifecycle();
+
             return;
         }
 
