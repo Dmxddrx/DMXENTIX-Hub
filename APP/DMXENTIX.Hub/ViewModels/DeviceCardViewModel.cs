@@ -81,6 +81,36 @@ public sealed class DeviceCardViewModel : ObservableObject
     public string FavoriteButtonText =>
         IsFavorite ? "FAVORITED" : "ADD FAVORITE";
 
+    // ========================================================
+    // AUTO RECONNECT PREFERENCE
+    // ========================================================
+
+    public bool AutoReconnectEnabled =>
+        _record.AutoReconnectEnabled;
+
+    public string AutoReconnectButtonText =>
+        AutoReconnectEnabled ? "ON" : "OFF";
+
+    public string AutoReconnectStatusText =>
+        AutoReconnectEnabled
+            ? "Reconnect automatically after an unexpected disconnect"
+            : "Manual connection only";
+
+    internal void SetAutoReconnectEnabled(bool enabled)
+    {
+        if (_record.AutoReconnectEnabled == enabled)
+            return;
+
+        _record = _record with
+        {
+            AutoReconnectEnabled = enabled
+        };
+
+        OnPropertyChanged(nameof(AutoReconnectEnabled));
+        OnPropertyChanged(nameof(AutoReconnectButtonText));
+        OnPropertyChanged(nameof(AutoReconnectStatusText));
+    }
+
     public string FavoriteGlyph =>
         IsFavorite ? "★" : "☆";
 
@@ -473,6 +503,9 @@ public sealed class DeviceCardViewModel : ObservableObject
         OnPropertyChanged(nameof(ProductSummary));
         OnPropertyChanged(nameof(ProductDeviceType));
         OnPropertyChanged(nameof(BluetoothTransportId));
+        OnPropertyChanged(nameof(AutoReconnectEnabled));
+        OnPropertyChanged(nameof(AutoReconnectButtonText));
+        OnPropertyChanged(nameof(AutoReconnectStatusText));
 
         NotifyConnectionProperties();
     }

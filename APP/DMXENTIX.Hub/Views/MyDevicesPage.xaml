@@ -210,6 +210,50 @@
 
                                     </Border>
 
+                                    <!-- ================================================= -->
+                                    <!-- AUTOMATIC RECONNECTION                            -->
+                                    <!-- ================================================= -->
+
+                                    <Grid
+                                        ColumnDefinitions="*,Auto"
+                                        ColumnSpacing="12">
+
+                                        <VerticalStackLayout
+                                            Spacing="4"
+                                            VerticalOptions="Center">
+
+                                            <Label
+                                                Text="AUTO RECONNECT"
+                                                FontSize="10"
+                                                CharacterSpacing="1"
+                                                FontAttributes="Bold"
+                                                TextColor="#DFE7F3" />
+
+                                            <Label
+                                                Text="{Binding AutoReconnectStatusText}"
+                                                FontSize="11"
+                                                TextColor="#8999AF"
+                                                LineBreakMode="WordWrap" />
+
+                                        </VerticalStackLayout>
+
+                                        <Button
+                                            Grid.Column="1"
+                                            Text="{Binding AutoReconnectButtonText}"
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type ContentPage}}, Path=BindingContext.ToggleAutoReconnectCommand}"
+                                            CommandParameter="{Binding .}"
+                                            BackgroundColor="#1A2E49"
+                                            TextColor="#9EC2FF"
+                                            FontAttributes="Bold"
+                                            FontSize="10"
+                                            WidthRequest="72"
+                                            HeightRequest="38"
+                                            Padding="8,6"
+                                            CornerRadius="9"
+                                            VerticalOptions="Center" />
+
+                                    </Grid>
+                                    
 
                                     <!-- CONNECTION HISTORY -->
 

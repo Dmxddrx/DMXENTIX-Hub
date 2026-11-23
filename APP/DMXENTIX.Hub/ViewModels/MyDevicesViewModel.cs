@@ -43,6 +43,11 @@ public sealed class MyDevicesViewModel : ObservableObject
             card => card is not null
         );
 
+        ToggleAutoReconnectCommand = new Command<DeviceCardViewModel>(
+            async card => await ToggleAutoReconnectAsync(card),
+            card => card is not null
+        );
+
         // ----------------------------------------------------
         // DEVICE REGISTRY EVENTS
         // ----------------------------------------------------
@@ -93,6 +98,8 @@ public sealed class MyDevicesViewModel : ObservableObject
     public Command<DeviceCardViewModel> ToggleFavoriteCommand { get; }
 
     public Command<DeviceCardViewModel> OpenWorkspaceCommand { get; }
+
+    public Command<DeviceCardViewModel> ToggleAutoReconnectCommand { get; }
 
     // ========================================================
     // REFRESH STATE
@@ -272,6 +279,44 @@ public sealed class MyDevicesViewModel : ObservableObject
 
             StatusMessage =
                 $"Could not update favourite: {ex.Message}";
+        }
+    }
+
+    // ========================================================
+    // TOGGLE AUTO RECONNECT
+    // ========================================================
+
+    private async Task ToggleAutoReconnectAsync(
+        DeviceCardViewModel? card)
+    {
+        if (card is null)
+            return;
+
+        bool previousValue = card.AutoReconnectEnabled;
+        bool newValue = !previousValue;
+
+        // Update the UI immediately.
+        card.SetAutoReconnectEnabled(newValue);
+
+        try
+        {
+            // Persist the preference in the device registry.
+            await _deviceRegistry.SetAutoReconnectEnabledAsync(
+                card.DeviceId,
+                newValue
+            );
+        }
+        catch (Exception ex)
+        {
+            // Restore the previous UI state if persistence fails.
+            card.SetAutoReconnectEnabled(previousValue);
+
+            Debug.WriteLine(
+                $"[MyDevicesViewModel] Could not update auto-reconnect preference: {ex.Message}"
+            );
+
+            StatusMessage =
+                $"Could not update auto-reconnect preference: {ex.Message}";
         }
     }
 
