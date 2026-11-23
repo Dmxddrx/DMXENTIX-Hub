@@ -278,9 +278,11 @@ public sealed class BluetoothService
         if (discoveredDevice?.DeviceType == AppDeviceType.Emotix360)
         {
             StopAutoConnectLoop(manualDisconnect: false);
-        }
 
-        _manualDisconnectRequested = false;
+            // Only an explicit EMOTIX360 connection should
+            // clear its manual-disconnect protection.
+            _manualDisconnectRequested = false;
+        }
 
         await _connectionOperationSemaphore.WaitAsync();
 
@@ -341,6 +343,89 @@ public sealed class BluetoothService
     }
 
     // ========================================================
+    // CONNECT A SAVED DEVICE
+    // ========================================================
+
+    public async Task<IDeviceSession> ConnectKnownDeviceAsync(
+        Guid deviceId,
+        AppDeviceType deviceType,
+        string productName,
+        CancellationToken cancellationToken = default)
+    {
+        // The legacy automatic reconnection workflow belongs
+        // exclusively to EMOTIX360.
+        if (deviceType == AppDeviceType.Emotix360)
+        {
+            StopAutoConnectLoop(manualDisconnect: false);
+
+            _manualDisconnectRequested = false;
+        }
+
+        await _connectionOperationSemaphore.WaitAsync(
+            cancellationToken
+        );
+
+        try
+        {
+            await EnsurePermissionsAsync();
+
+            // Ensure a discovery operation is not holding
+            // the shared BLE adapter.
+            await StopScanAsync();
+
+#if ANDROID
+            BleForegroundServiceController.Start();
+#endif
+
+            try
+            {
+                IDeviceSession session =
+                    await _connectionManager.ConnectKnownDeviceAsync(
+                        deviceId,
+                        deviceType,
+                        productName,
+                        cancellationToken
+                    );
+
+                // Only EMOTIX360 owns the legacy active-session
+                // and remembered-device compatibility workflow.
+                if (session.DeviceType == AppDeviceType.Emotix360)
+                {
+                    SetActiveSession(session);
+
+                    SaveRememberedDevice(
+                        session.DeviceId,
+                        session.DeviceName
+                    );
+                }
+                else
+                {
+                    Debug.WriteLine(
+                        $"[BLE] Saved device connected: {session.ProductName}, " +
+                        $"ID: {session.DeviceId}"
+                    );
+                }
+
+                return session;
+            }
+            catch
+            {
+#if ANDROID
+                if (_connectionManager.ConnectedSessionCount == 0)
+                {
+                    BleForegroundServiceController.Stop();
+                }
+#endif
+                throw;
+            }
+        }
+        finally
+        {
+            _connectionOperationSemaphore.Release();
+        }
+    }
+
+    // ========================================================
     // MANUAL DISCONNECTION
     // ========================================================
 
@@ -369,6 +454,65 @@ public sealed class BluetoothService
 #if ANDROID
             // Do not stop the foreground service if another
             // device session remains connected.
+            if (_connectionManager.ConnectedSessionCount == 0)
+            {
+                BleForegroundServiceController.Stop();
+            }
+#endif
+        }
+    }
+
+    // ========================================================
+    // DISCONNECT ONE SPECIFIC DEVICE
+    // ========================================================
+
+    public async Task DisconnectDeviceAsync(
+        Guid deviceId,
+        CancellationToken cancellationToken = default)
+    {
+        IDeviceSession? session =
+            _connectionManager.GetSession(deviceId);
+
+        if (session is null)
+            return;
+
+        // Suppress automatic EMOTIX360 reconnection before
+        // starting its manual disconnection.
+        if (session.DeviceType == AppDeviceType.Emotix360)
+        {
+            StopAutoConnectLoop(manualDisconnect: true);
+        }
+
+        await _connectionOperationSemaphore.WaitAsync(
+            cancellationToken
+        );
+
+        try
+        {
+            session = _connectionManager.GetSession(deviceId);
+
+            if (session is null || !session.IsConnected)
+                return;
+
+            await _connectionManager.DisconnectAsync(
+                deviceId,
+                cancellationToken
+            );
+
+            // Clear the legacy selection only when the exact
+            // active EMOTIX360 session was disconnected.
+            if (ReferenceEquals(_activeSession, session))
+            {
+                SetActiveSession(null);
+            }
+        }
+        finally
+        {
+            _connectionOperationSemaphore.Release();
+
+#if ANDROID
+            // Keep the foreground service running while another
+            // device remains connected.
             if (_connectionManager.ConnectedSessionCount == 0)
             {
                 BleForegroundServiceController.Stop();

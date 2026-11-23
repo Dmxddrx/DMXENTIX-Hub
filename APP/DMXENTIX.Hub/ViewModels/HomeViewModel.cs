@@ -5,6 +5,7 @@ using DMXENTIX.Hub.Services.Bluetooth;
 using DMXENTIX.Hub.Services.Devices;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
+using DMXENTIX.Hub.Services;
 
 namespace DMXENTIX.Hub.ViewModels;
 
@@ -29,18 +30,27 @@ public sealed class HomeViewModel : ObservableObject
 
     private DeviceCardViewModel? _selectedInfoCard;
     private bool _isInfoPopupVisible;
+    private readonly BluetoothService _bluetooth;
 
     public HomeViewModel(
         DeviceRegistryService deviceRegistry,
-        BleConnectionManager connectionManager)
+        BleConnectionManager connectionManager,
+        BluetoothService bluetooth)
     {
         _deviceRegistry = deviceRegistry;
         _connectionManager = connectionManager;
+        _bluetooth = bluetooth;
 
         OpenWorkspaceCommand = new Command<DeviceCardViewModel>(
             async card => await OpenWorkspaceAsync(card),
             card => card is not null
         );
+
+        ConnectionActionCommand =
+            new Command<DeviceCardViewModel>(
+                async card => await ExecuteConnectionActionAsync(card),
+                card => card is not null
+            );
 
         ToggleFavoriteCommand = new Command<DeviceCardViewModel>(
             async card => await ToggleFavoriteAsync(card),
@@ -69,6 +79,9 @@ public sealed class HomeViewModel : ObservableObject
 
         _connectionManager.SessionStateChanged +=
             OnSessionStateChanged;
+
+        _bluetooth.BluetoothPowerStateChanged +=
+            OnBluetoothPowerStateChanged;
     }
 
     // ========================================================
@@ -115,6 +128,8 @@ public sealed class HomeViewModel : ObservableObject
     public Command<DeviceCardViewModel> ShowInformationCommand { get; }
 
     public Command CloseInfoPopupCommand { get; }
+
+    public Command<DeviceCardViewModel> ConnectionActionCommand { get; }
 
     // ========================================================
     // HOME STATUS
@@ -294,6 +309,9 @@ public sealed class HomeViewModel : ObservableObject
                     entry.Session
                 );
             }
+            card.SetBluetoothAvailability(
+                _bluetooth.IsBluetoothOn
+            );
         }
 
         // Remove cards that are neither connected nor favourites.
@@ -498,6 +516,133 @@ public sealed class HomeViewModel : ObservableObject
     }
 
     // ========================================================
+    // CONNECT / DISCONNECT DEVICE FROM HOME
+    // ========================================================
+
+    private async Task ExecuteConnectionActionAsync(
+        DeviceCardViewModel? card)
+    {
+        if (card is null ||
+            !card.CanChangeConnectionAction)
+        {
+            return;
+        }
+
+        bool disconnecting = card.IsConnected;
+
+        bool enablingBluetooth =
+            !disconnecting && !_bluetooth.IsBluetoothOn;
+
+        card.SetConnectionOperation(
+            true,
+            disconnecting,
+            enablingBluetooth
+        );
+
+        try
+        {
+            Guid? bluetoothDeviceId =
+                card.BluetoothTransportId;
+
+            // ------------------------------------------------
+            // DISCONNECT THE SELECTED DEVICE
+            // ------------------------------------------------
+
+            if (disconnecting)
+            {
+                if (!bluetoothDeviceId.HasValue)
+                {
+                    throw new InvalidOperationException(
+                        "The saved Bluetooth device ID is unavailable."
+                    );
+                }
+
+                await _bluetooth.DisconnectDeviceAsync(
+                    bluetoothDeviceId.Value
+                );
+
+                return;
+            }
+
+            // ------------------------------------------------
+            // REQUEST BLUETOOTH ACTIVATION
+            // ------------------------------------------------
+
+            if (!_bluetooth.IsBluetoothOn)
+            {
+                bool enabled =
+                    await _bluetooth.RequestEnableBluetoothAsync();
+
+                card.SetBluetoothAvailability(
+                    _bluetooth.IsBluetoothOn
+                );
+
+                StatusMessage =
+                    enabled && _bluetooth.IsBluetoothOn
+                        ? "Bluetooth is on. Press CONNECT to connect this device."
+                        : "Bluetooth was not enabled. Enable it to connect.";
+
+                return;
+            }
+
+            // ------------------------------------------------
+            // FALL BACK TO DEVICE DISCOVERY
+            // ------------------------------------------------
+
+            if (!bluetoothDeviceId.HasValue)
+            {
+                StatusMessage =
+                    "This device has no saved Bluetooth transport ID. " +
+                    "Opening device discovery.";
+
+                Shell? shell = Shell.Current;
+
+                if (shell is not null)
+                {
+                    await shell.GoToAsync("devices");
+                }
+
+                return;
+            }
+
+            // ------------------------------------------------
+            // CONNECT THE SAVED DEVICE
+            // ------------------------------------------------
+
+            await _bluetooth.ConnectKnownDeviceAsync(
+                bluetoothDeviceId.Value,
+                card.ProductDeviceType,
+                card.DisplayName
+            );
+
+            // Update the saved connection timestamp.
+            await _deviceRegistry.MarkConnectedAsync(
+                card.DeviceId
+            );
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[HomeViewModel] Device connection action failed: {ex}"
+            );
+
+            StatusMessage =
+                $"Could not update {card.DisplayName}: {ex.Message}";
+        }
+        finally
+        {
+            card.SetConnectionOperation(
+                false,
+                false
+            );
+
+            card.SetBluetoothAvailability(
+                _bluetooth.IsBluetoothOn
+            );
+        }
+    }
+
+    // ========================================================
     // OPEN DEVICE WORKSPACE
     // ========================================================
 
@@ -592,4 +737,20 @@ public sealed class HomeViewModel : ObservableObject
         DeviceRecord Record,
         IDeviceSession? Session
     );
+
+    // ========================================================
+    // BLUETOOTH POWER CHANGES
+    // ========================================================
+
+    private void OnBluetoothPowerStateChanged(bool isOn)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            foreach (DeviceCardViewModel card in
+                     _cardsByDeviceId.Values)
+            {
+                card.SetBluetoothAvailability(isOn);
+            }
+        });
+    }
 }

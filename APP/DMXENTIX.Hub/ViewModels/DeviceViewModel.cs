@@ -26,6 +26,8 @@ public sealed class DeviceViewModel : ObservableObject
     private string _statusMessage =
         "Scan to find your nearby EMOTIX360.";
 
+
+
     private readonly DeviceDiscoveryService _deviceDiscovery;
 
     // ========================================================

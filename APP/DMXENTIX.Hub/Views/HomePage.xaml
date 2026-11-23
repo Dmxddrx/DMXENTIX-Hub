@@ -403,6 +403,21 @@
 
                         </VerticalStackLayout>
 
+                        <!-- ========================================= -->
+                        <!-- DEVICE CONNECTION ACTION                 -->
+                        <!-- ========================================= -->
+
+                        <Button
+                            Text="{Binding ConnectionActionText}"
+                            Command="{Binding Source={RelativeSource AncestorType={x:Type ContentPage}}, Path=BindingContext.ConnectionActionCommand}"
+                            CommandParameter="{Binding .}"
+                            BackgroundColor="{Binding ConnectionActionColor}"
+                            TextColor="White"
+                            FontSize="11"
+                            FontAttributes="Bold"
+                            HeightRequest="44"
+                            CornerRadius="11"
+                            IsEnabled="{Binding CanChangeConnectionAction}" />
 
                         <!-- ========================================= -->
                         <!-- OPEN WORKSPACE HINT                       -->

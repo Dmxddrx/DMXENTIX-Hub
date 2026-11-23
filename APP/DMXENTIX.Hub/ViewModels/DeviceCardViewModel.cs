@@ -19,6 +19,10 @@ public sealed class DeviceCardViewModel : ObservableObject
 
     private DeviceStatus? _emotixStatus;
     private SoundNodeTelemetry? _soundNodeTelemetry;
+    private bool _isBluetoothAvailable = true;
+    private bool _isConnectionBusy;
+    private bool _isDisconnecting;
+    private bool _isEnablingBluetooth;
 
     public DeviceCardViewModel(
         DeviceRecord record,
@@ -43,6 +47,16 @@ public sealed class DeviceCardViewModel : ObservableObject
         string.IsNullOrWhiteSpace(_record.BluetoothDeviceId)
             ? "Not available"
             : _record.BluetoothDeviceId;
+
+    public AppDeviceType ProductDeviceType =>
+        _record.DeviceType;
+
+    public Guid? BluetoothTransportId =>
+        Guid.TryParse(
+            _record.BluetoothDeviceId,
+            out Guid deviceId)
+                ? deviceId
+                : null;
 
     public string DisplayName =>
         _record.DisplayName;
@@ -77,6 +91,8 @@ public sealed class DeviceCardViewModel : ObservableObject
                 .ToString("g")
             : "Not yet connected";
 
+
+
     // ========================================================
     // CONNECTION STATE
     // ========================================================
@@ -88,21 +104,134 @@ public sealed class DeviceCardViewModel : ObservableObject
         {
             if (SetProperty(ref _isConnected, value))
             {
-                OnPropertyChanged(nameof(ConnectionStatusText));
-                OnPropertyChanged(nameof(ConnectionStatusColor));
-
+                NotifyConnectionProperties();
                 NotifyLiveStatusProperties();
             }
         }
     }
 
+    public bool IsConnecting =>
+        _session?.ConnectionState is
+            DeviceConnectionState.Connecting or
+            DeviceConnectionState.Reconnecting;
+
     public string ConnectionStatusText =>
-        IsConnected ? "CONNECTED" : "SAVED · OFFLINE";
+        IsConnected
+            ? "CONNECTED"
+            : IsConnecting
+                ? "CONNECTING"
+                : "SAVED · OFFLINE";
 
     public Color ConnectionStatusColor =>
         IsConnected
             ? Color.FromArgb("#72C9A0")
-            : Color.FromArgb("#A0AEC0");
+            : IsConnecting
+                ? Color.FromArgb("#E6B866")
+                : Color.FromArgb("#A0AEC0");
+
+    // ========================================================
+    // CONNECTION ACTION STATE
+    // ========================================================
+
+    public bool IsConnectionBusy =>
+        _isConnectionBusy;
+
+    public bool IsBluetoothAvailable =>
+        _isBluetoothAvailable;
+
+    public bool CanChangeConnectionAction =>
+        !_isConnectionBusy &&
+        !IsConnecting;
+
+    public string ConnectionActionText
+    {
+        get
+        {
+            if (_isEnablingBluetooth)
+                return "ENABLING BLUETOOTH...";
+
+            if (_isDisconnecting)
+                return "DISCONNECTING...";
+
+            if (_isConnectionBusy || IsConnecting)
+                return "CONNECTING...";
+
+            if (IsConnected)
+                return "DISCONNECT";
+
+            if (!IsBluetoothAvailable)
+                return "TURN ON BLUETOOTH";
+
+            return BluetoothTransportId.HasValue
+                ? "CONNECT"
+                : "FIND DEVICE";
+        }
+    }
+
+    public Color ConnectionActionColor
+    {
+        get
+        {
+            if (IsConnected)
+                return Color.FromArgb("#A3444F");
+
+            if (!IsBluetoothAvailable)
+                return Color.FromArgb("#936F35");
+
+            return Color.FromArgb("#397FE8");
+        }
+    }
+
+    // ========================================================
+    // UPDATE BLUETOOTH AVAILABILITY
+    // ========================================================
+
+    internal void SetBluetoothAvailability(bool isAvailable)
+    {
+        if (!SetProperty(
+                ref _isBluetoothAvailable,
+                isAvailable,
+                nameof(IsBluetoothAvailable)))
+        {
+            return;
+        }
+
+        NotifyConnectionProperties();
+    }
+
+    // ========================================================
+    // UPDATE CONNECTION OPERATION
+    // ========================================================
+
+    internal void SetConnectionOperation(
+        bool isBusy,
+        bool isDisconnecting,
+        bool isEnablingBluetooth = false)
+    {
+        _isConnectionBusy = isBusy;
+        _isDisconnecting = isDisconnecting;
+        _isEnablingBluetooth = isEnablingBluetooth;
+
+        OnPropertyChanged(nameof(IsConnectionBusy));
+
+        NotifyConnectionProperties();
+    }
+
+    // ========================================================
+    // CONNECTION PROPERTY NOTIFICATIONS
+    // ========================================================
+
+    private void NotifyConnectionProperties()
+    {
+        OnPropertyChanged(nameof(IsConnected));
+        OnPropertyChanged(nameof(IsConnecting));
+        OnPropertyChanged(nameof(ConnectionStatusText));
+        OnPropertyChanged(nameof(ConnectionStatusColor));
+
+        OnPropertyChanged(nameof(ConnectionActionText));
+        OnPropertyChanged(nameof(ConnectionActionColor));
+        OnPropertyChanged(nameof(CanChangeConnectionAction));
+    }
 
     // ========================================================
     // INFORMATION PANEL
@@ -342,6 +471,10 @@ public sealed class DeviceCardViewModel : ObservableObject
         OnPropertyChanged(nameof(HasFirmwareInfo));
         OnPropertyChanged(nameof(FirmwareInfoText));
         OnPropertyChanged(nameof(ProductSummary));
+        OnPropertyChanged(nameof(ProductDeviceType));
+        OnPropertyChanged(nameof(BluetoothTransportId));
+
+        NotifyConnectionProperties();
     }
 
     // ========================================================
