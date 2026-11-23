@@ -186,8 +186,8 @@
     <!-- ============================================================ -->
 
     <VerticalStackLayout
-        Padding="22,26,22,30"
-        Spacing="23">
+            Padding="0,0,0,0"
+            Spacing="20">
 
         <!-- ======================================================== -->
         <!-- 1. HEADER                                                -->
@@ -253,27 +253,26 @@
         <!-- ======================================================== -->
         <!-- 2. WELCOME SECTION                                       -->
         <!-- ======================================================== -->
-        <VerticalStackLayout Spacing="5">
+        <VerticalStackLayout Spacing="6">
 
-            <!-- Welcome heading -->
             <Label
-                Text="Your device."
-                FontSize="32"
+                Text="DISPLAY CONTROLS"
+                FontSize="12"
+                FontAttributes="Bold"
+                CharacterSpacing="1.4"
+                TextColor="#91A4BF" />
+
+            <Label
+                Text="Manage your EMOTIX360."
+                FontSize="24"
                 FontAttributes="Bold"
                 TextColor="#F2F5FC" />
 
             <Label
-                Text="Your experience."
-                FontSize="32"
-                FontAttributes="Bold"
-                TextColor="#5796FF" />
-
-            <!-- Description -->
-            <Label
-                Text="Control and explore your EMOTIX360."
-                FontSize="14"
+                Text="Animations, brightness and live device information."
+                FontSize="13"
                 TextColor="#8999AF"
-                Margin="0,5,0,0" />
+                LineBreakMode="WordWrap" />
 
         </VerticalStackLayout>
 
@@ -472,26 +471,45 @@
                         <RoundRectangle CornerRadius="17" />
                     </Border.StrokeShape>
 
-                    <VerticalStackLayout Spacing="9">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
 
-                        <Label
-                            Text="WI-FI"
-                            FontSize="10"
-                            CharacterSpacing="1"
-                            TextColor="#8495AE" />
+                        <VerticalStackLayout
+                            Spacing="6"
+                            VerticalOptions="Center">
 
-                        <Label
-                            Text="{Binding WifiText}"
-                            FontSize="20"
+                            <Label
+                                Text="WI-FI"
+                                FontSize="10"
+                                CharacterSpacing="1"
+                                TextColor="#8495AE" />
+
+                            <Label
+                                Text="{Binding WifiText}"
+                                FontSize="20"
+                                FontAttributes="Bold"
+                                TextColor="#72C9A0" />
+
+                            <Label
+                                Text="{Binding TimeText}"
+                                FontSize="10"
+                                TextColor="#7789A3" />
+
+                        </VerticalStackLayout>
+
+                        <Button
+                            Grid.Column="1"
+                            Text="CONFIG"
+                            Clicked="OnWifiConfigurationClicked"
+                            BackgroundColor="#263C58"
+                            TextColor="#A9C8FF"
                             FontAttributes="Bold"
-                            TextColor="#72C9A0" />
-
-                        <Label
-                            Text="{Binding TimeText}"
                             FontSize="10"
-                            TextColor="#7789A3" />
+                            Padding="12,0"
+                            HeightRequest="36"
+                            CornerRadius="10"
+                            VerticalOptions="Center" />
 
-                    </VerticalStackLayout>
+                    </Grid>
 
                 </Border>
 

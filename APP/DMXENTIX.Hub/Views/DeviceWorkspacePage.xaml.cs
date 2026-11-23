@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using DMXENTIX.Hub.ViewModels;
 
-
 namespace DMXENTIX.Hub.Views;
 
 public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
@@ -10,6 +9,8 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
     private readonly WifiProvisioningViewModel _wifiProvisioningViewModel;
 
     private string? _deviceId;
+
+    private bool _isWifiConfigurationVisible;
 
     public DeviceWorkspacePage(
         DeviceWorkspaceViewModel viewModel,
@@ -28,6 +29,10 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
 
         // The workspace already displays its own connection information.
         Emotix360Dashboard.ShowDeviceConnectionCard = false;
+
+        // Connect the dashboard Wi-Fi button to the workspace screen.
+        Emotix360Dashboard.WifiConfigurationRequested +=
+            OnWifiConfigurationRequested;
 
         // Wi-Fi provisioning has a separate workspace-specific ViewModel.
         Emotix360WifiProvisioning.BindingContext =
@@ -50,6 +55,57 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
         {
             _deviceId = null;
         }
+    }
+
+    // ========================================================
+    // OPEN WI-FI CONFIGURATION
+    // ========================================================
+
+    private void OnWifiConfigurationRequested(
+        object? sender,
+        EventArgs e)
+    {
+        if (!_viewModel.IsEmotix360Workspace ||
+            !_viewModel.IsConnected)
+        {
+            return;
+        }
+
+        _isWifiConfigurationVisible = true;
+
+        WorkspaceContent.IsVisible = false;
+        WifiConfigurationScreen.IsVisible = true;
+    }
+
+    // ========================================================
+    // CLOSE WI-FI CONFIGURATION
+    // ========================================================
+
+    private void OnCloseWifiConfigurationClicked(
+        object? sender,
+        EventArgs e)
+    {
+        CloseWifiConfigurationScreen();
+    }
+
+    private void CloseWifiConfigurationScreen()
+    {
+        _isWifiConfigurationVisible = false;
+
+        WifiConfigurationScreen.IsVisible = false;
+        WorkspaceContent.IsVisible = true;
+    }
+
+    // Allow AppShell to close this screen before
+    // handling the normal Android Back navigation.
+    public bool TryCloseWifiConfiguration()
+    {
+        if (!_isWifiConfigurationVisible)
+            return false;
+
+        CloseWifiConfigurationScreen();
+
+        return true;
     }
 
     // ========================================================
@@ -81,6 +137,8 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
 
     protected override void OnDisappearing()
     {
+        CloseWifiConfigurationScreen();
+
         // Remove the workspace-to-provisioning connection.
         _viewModel.WorkspaceSessionChanged -=
             _wifiProvisioningViewModel.SetSession;

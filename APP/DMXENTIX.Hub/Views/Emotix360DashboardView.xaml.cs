@@ -4,6 +4,8 @@ namespace DMXENTIX.Hub.Views;
 
 public partial class Emotix360DashboardView : ContentView
 {
+    public event EventHandler? WifiConfigurationRequested;
+
     public Emotix360DashboardView()
     {
         InitializeComponent();
@@ -16,5 +18,13 @@ public partial class Emotix360DashboardView : ContentView
     {
         get => DeviceConnectionCard.IsVisible;
         set => DeviceConnectionCard.IsVisible = value;
+    }
+
+    // Request the parent workspace to open Wi-Fi configuration.
+    private void OnWifiConfigurationClicked(
+        object? sender,
+        EventArgs e)
+    {
+        WifiConfigurationRequested?.Invoke(this, EventArgs.Empty);
     }
 }

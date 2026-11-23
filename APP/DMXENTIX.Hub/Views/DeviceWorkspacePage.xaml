@@ -9,9 +9,11 @@
     BackgroundColor="#0B111B"
     Shell.NavBarIsVisible="False">
 
-    <ScrollView>
+    <Grid>
 
-        <VerticalStackLayout
+        <ScrollView x:Name="WorkspaceContent">
+
+            <VerticalStackLayout
             Padding="22,26,22,30"
             Spacing="20">
 
@@ -82,6 +84,54 @@
                 </VerticalStackLayout>
 
             </Border>
+
+
+            <!-- ================================================= -->
+            <!-- WORKSPACE CONTENT                                 -->
+            <!-- ================================================= -->
+
+            <Border
+                IsVisible="{Binding IsWorkspaceMessageVisible}"
+                BackgroundColor="#142135"
+                Stroke="#263C58"
+                StrokeThickness="1"
+                Padding="18">
+
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="17" />
+                </Border.StrokeShape>
+
+                <VerticalStackLayout Spacing="10">
+
+                    <Label
+                        Text="WORKSPACE"
+                        FontSize="11"
+                        CharacterSpacing="1.2"
+                        FontAttributes="Bold"
+                        TextColor="#91A4BF" />
+
+                    <Label
+                        Text="{Binding WorkspaceMessage}"
+                        FontSize="13"
+                        TextColor="#C0CCDD"
+                        LineBreakMode="WordWrap" />
+
+                </VerticalStackLayout>
+
+            </Border>
+
+            <!-- ================================================= -->
+            <!-- EMOTIX360 DASHBOARD                               -->
+            <!-- ================================================= -->
+
+            <VerticalStackLayout
+                IsVisible="{Binding IsDashboardVisible}"
+                Spacing="0">
+
+                <views:Emotix360DashboardView
+                    x:Name="Emotix360Dashboard" />
+
+            </VerticalStackLayout>
 
 
             <!-- ================================================= -->
@@ -176,68 +226,6 @@
 
             </Border>
 
-
-            <!-- ================================================= -->
-            <!-- WORKSPACE CONTENT                                 -->
-            <!-- ================================================= -->
-
-            <Border
-                IsVisible="{Binding IsWorkspaceMessageVisible}"
-                BackgroundColor="#142135"
-                Stroke="#263C58"
-                StrokeThickness="1"
-                Padding="18">
-
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="17" />
-                </Border.StrokeShape>
-
-                <VerticalStackLayout Spacing="10">
-
-                    <Label
-                        Text="WORKSPACE"
-                        FontSize="11"
-                        CharacterSpacing="1.2"
-                        FontAttributes="Bold"
-                        TextColor="#91A4BF" />
-
-                    <Label
-                        Text="{Binding WorkspaceMessage}"
-                        FontSize="13"
-                        TextColor="#C0CCDD"
-                        LineBreakMode="WordWrap" />
-
-                </VerticalStackLayout>
-
-            </Border>
-
-            <!-- ================================================= -->
-            <!-- EMOTIX360 DASHBOARD                               -->
-            <!-- ================================================= -->
-
-            <VerticalStackLayout
-                IsVisible="{Binding IsDashboardVisible}"
-                Spacing="0">
-
-                <views:Emotix360DashboardView
-                    x:Name="Emotix360Dashboard" />
-
-            </VerticalStackLayout>
-
-
-            <!-- ================================================= -->
-            <!-- EMOTIX360 WI-FI PROVISIONING                      -->
-            <!-- ================================================= -->
-
-            <VerticalStackLayout
-                IsVisible="{Binding IsWifiProvisioningVisible}"
-                Spacing="0">
-
-                <views:Emotix360WifiProvisioningView
-                     x:Name="Emotix360WifiProvisioning" />
-
-            </VerticalStackLayout>
-
             <!-- ================================================= -->
             <!-- FOOTER                                            -->
             <!-- ================================================= -->
@@ -251,5 +239,79 @@
         </VerticalStackLayout>
 
     </ScrollView>
+        <!-- ================================================= -->
+        <!-- EMOTIX360 WI-FI CONFIGURATION SCREEN              -->
+        <!-- ================================================= -->
+
+        <Grid
+            x:Name="WifiConfigurationScreen"
+            IsVisible="False"
+            BackgroundColor="#0B111B">
+
+            <ScrollView>
+
+                <VerticalStackLayout
+                    Padding="22,26,22,30"
+                    Spacing="20">
+
+                    <!-- PAGE HEADER -->
+
+                    <Grid
+                        ColumnDefinitions="Auto,*"
+                        ColumnSpacing="14">
+
+                        <!-- CLOSE / BACK BUTTON -->
+
+                        <Button
+                            Text="←"
+                            Clicked="OnCloseWifiConfigurationClicked"
+                            BackgroundColor="#142135"
+                            TextColor="#F2F5FC"
+                            FontSize="24"
+                            WidthRequest="46"
+                            HeightRequest="46"
+                            Padding="0"
+                            CornerRadius="14"
+                            VerticalOptions="Center" />
+
+                        <VerticalStackLayout
+                            Grid.Column="1"
+                            Spacing="4"
+                            VerticalOptions="Center">
+
+                            <Label
+                                Text="EMOTIX360"
+                                FontSize="11"
+                                CharacterSpacing="1.5"
+                                FontAttributes="Bold"
+                                TextColor="#5796FF" />
+
+                            <Label
+                                Text="Wi-Fi Configuration"
+                                FontSize="23"
+                                FontAttributes="Bold"
+                                TextColor="#F2F5FC" />
+
+                        </VerticalStackLayout>
+
+                    </Grid>
+
+                    <Label
+                        Text="Manage the Wi-Fi network used by your EMOTIX360."
+                        FontSize="13"
+                        TextColor="#8999AF" />
+
+                    <!-- EXISTING WI-FI PROVISIONING INTERFACE -->
+
+                    <views:Emotix360WifiProvisioningView
+                        x:Name="Emotix360WifiProvisioning" />
+
+                </VerticalStackLayout>
+
+            </ScrollView>
+
+        </Grid>
+        
+    </Grid>
 
 </ContentPage>
