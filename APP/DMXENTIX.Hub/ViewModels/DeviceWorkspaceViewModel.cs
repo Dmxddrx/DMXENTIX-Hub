@@ -128,7 +128,8 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
         IsEmotix360Workspace && IsConnected;
 
     public bool IsWorkspaceMessageVisible =>
-        !IsDashboardVisible;
+        !IsDashboardVisible &&
+        !IsSoundNodeDashboardVisible;
 
     // ========================================================
     // SOUNDNODE TELEMETRY
@@ -147,17 +148,21 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
         _soundNodeTelemetry?.Peak.ToString() ?? "--";
 
     public string SoundNodeTemperatureText =>
-        _soundNodeTelemetry?.ChipTemperatureC is double temperature
-            ? $"{temperature:F1} °C"
-            : "Unavailable";
+        _soundNodeTelemetry is null
+            ? "--"
+            : _soundNodeTelemetry.ChipTemperatureC is double temperature
+                ? $"{temperature:F1} °C"
+                : "Unavailable";
 
     public bool HasSoundNodeTelemetry =>
         _soundNodeTelemetry is not null;
 
     public string SoundNodeTelemetryStatusText =>
-        HasSoundNodeTelemetry
-            ? "LIVE TELEMETRY"
-            : "WAITING FOR TELEMETRY";
+        !IsConnected
+            ? "DEVICE OFFLINE"
+            : HasSoundNodeTelemetry
+                ? "LIVE TELEMETRY"
+                : "WAITING FOR TELEMETRY";
 
     // ========================================================
     // LOADING STATE
@@ -188,8 +193,10 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
                 OnPropertyChanged(nameof(ConnectionStatusColor));
                 OnPropertyChanged(nameof(WorkspaceMessage));
                 OnPropertyChanged(nameof(IsDashboardVisible));
+                OnPropertyChanged(nameof(IsSoundNodeDashboardVisible));
                 OnPropertyChanged(nameof(IsWorkspaceMessageVisible));
                 OnPropertyChanged(nameof(IsWifiProvisioningVisible));
+                OnPropertyChanged(nameof(SoundNodeTelemetryStatusText));
             }
         }
     }

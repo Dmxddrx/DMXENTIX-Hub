@@ -156,8 +156,21 @@
 
             </VerticalStackLayout>
 
-
             <!-- ================================================= -->
+            <!-- SOUNDNODE DASHBOARD                               -->
+            <!-- ================================================= -->
+
+                <VerticalStackLayout
+                    IsVisible="{Binding IsSoundNodeDashboardVisible}"
+                    Spacing="0">
+
+                    <views:SoundNodeDashboardView
+                        x:Name="SoundNodeDashboard" />
+
+                </VerticalStackLayout>
+
+
+                <!-- ================================================= -->
             <!-- FOOTER                                            -->
             <!-- ================================================= -->
 

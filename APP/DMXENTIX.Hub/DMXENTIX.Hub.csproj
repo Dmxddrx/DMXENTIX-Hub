@@ -42,6 +42,9 @@
     <MauiXaml Update="Views\Emotix360DashboardView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </MauiXaml>
+    <MauiXaml Update="Views\SoundNodeDashboardView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </MauiXaml>
     <MauiXaml Update="Views\Emotix360WifiProvisioningView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </MauiXaml>
@@ -68,6 +71,9 @@
     </Compile>
     <Compile Update="Views\Emotix360DashboardView.xaml.cs">
       <DependentUpon>Emotix360DashboardView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Views\SoundNodeDashboardView.xaml.cs">
+      <DependentUpon>SoundNodeDashboardView.xaml</DependentUpon>
     </Compile>
   </ItemGroup>
 

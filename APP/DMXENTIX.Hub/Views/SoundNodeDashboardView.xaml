@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<ContentView
+    x:Class="DMXENTIX.Hub.Views.SoundNodeDashboardView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    BackgroundColor="#0B111B">
+
+    <VerticalStackLayout Spacing="16">
+
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <VerticalStackLayout Spacing="5">
+                <Label
+                    Text="AUDIO MONITORING"
+                    FontSize="13"
+                    FontAttributes="Bold"
+                    CharacterSpacing="1"
+                    TextColor="#E8EDF7" />
+                <Label
+                    Text="Live microphone signal measurements."
+                    FontSize="12"
+                    TextColor="#8999AF" />
+            </VerticalStackLayout>
+
+            <Border
+                Grid.Column="1"
+                BackgroundColor="#192638"
+                Stroke="#293B52"
+                StrokeThickness="1"
+                Padding="10,7"
+                VerticalOptions="Center">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="10" />
+                </Border.StrokeShape>
+                <Label
+                    Text="{Binding SoundNodeTelemetryStatusText}"
+                    FontSize="9"
+                    FontAttributes="Bold"
+                    CharacterSpacing="0.4"
+                    TextColor="#9EC2FF"
+                    VerticalOptions="Center" />
+            </Border>
+        </Grid>
+
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="11">
+
+            <Border
+                Grid.Column="0"
+                BackgroundColor="#121C2B"
+                Stroke="#26364A"
+                StrokeThickness="1"
+                Padding="16">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="17" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="9">
+                    <Label
+                        Text="RMS LEVEL"
+                        FontSize="10"
+                        CharacterSpacing="1"
+                        FontAttributes="Bold"
+                        TextColor="#8495AE" />
+                    <Label
+                        Text="{Binding SoundNodeRmsText}"
+                        FontSize="30"
+                        FontAttributes="Bold"
+                        TextColor="#5796FF"
+                        LineBreakMode="NoWrap" />
+                    <Label
+                        Text="ADC counts"
+                        FontSize="10"
+                        TextColor="#7789A3" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border
+                Grid.Column="1"
+                BackgroundColor="#121C2B"
+                Stroke="#26364A"
+                StrokeThickness="1"
+                Padding="16">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="17" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="9">
+                    <Label
+                        Text="PEAK LEVEL"
+                        FontSize="10"
+                        CharacterSpacing="1"
+                        FontAttributes="Bold"
+                        TextColor="#8495AE" />
+                    <Label
+                        Text="{Binding SoundNodePeakText}"
+                        FontSize="30"
+                        FontAttributes="Bold"
+                        TextColor="#E5BD70"
+                        LineBreakMode="NoWrap" />
+                    <Label
+                        Text="ADC counts"
+                        FontSize="10"
+                        TextColor="#7789A3" />
+                </VerticalStackLayout>
+            </Border>
+
+        </Grid>
+
+        <Border
+            BackgroundColor="#121C2B"
+            Stroke="#26364A"
+            StrokeThickness="1"
+            Padding="17">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="17" />
+            </Border.StrokeShape>
+            <Grid ColumnDefinitions="*,Auto">
+                <VerticalStackLayout Spacing="6" VerticalOptions="Center">
+                    <Label
+                        Text="CHIP TEMPERATURE"
+                        FontSize="10"
+                        CharacterSpacing="1"
+                        FontAttributes="Bold"
+                        TextColor="#8495AE" />
+                    <Label
+                        Text="ESP32-C3"
+                        FontSize="12"
+                        TextColor="#8999AF" />
+                </VerticalStackLayout>
+                <Label
+                    Grid.Column="1"
+                    Text="{Binding SoundNodeTemperatureText}"
+                    FontSize="23"
+                    FontAttributes="Bold"
+                    TextColor="#C49AFF"
+                    HorizontalTextAlignment="End"
+                    VerticalOptions="Center"
+                    LineBreakMode="NoWrap" />
+            </Grid>
+        </Border>
+
+        <Border
+            BackgroundColor="#142135"
+            Stroke="#263C58"
+            StrokeThickness="1"
+            Padding="16">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="15" />
+            </Border.StrokeShape>
+            <VerticalStackLayout Spacing="7">
+                <Label
+                    Text="ABOUT THESE READINGS"
+                    FontSize="10"
+                    CharacterSpacing="1"
+                    FontAttributes="Bold"
+                    TextColor="#91A4BF" />
+                <Label
+                    Text="RMS and Peak are relative ADC-count measurements calculated after removing the microphone signal's DC offset. They indicate changes in audio activity, but they are not calibrated dB SPL or dBA readings."
+                    FontSize="11"
+                    TextColor="#AAB8CB"
+                    LineHeight="1.3"
+                    LineBreakMode="WordWrap" />
+            </VerticalStackLayout>
+        </Border>
+
+    </VerticalStackLayout>
+</ContentView>
