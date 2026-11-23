@@ -356,7 +356,9 @@
         <!-- ======================================================== -->
         <!-- 4. DEVICE OVERVIEW                                       -->
         <!-- ======================================================== -->
-        <VerticalStackLayout Spacing="12">
+        <VerticalStackLayout 
+            IsVisible="{Binding HasOverviewCapabilities}"
+            Spacing="12">
 
             <!-- Overview heading and status -->
             <Grid ColumnDefinitions="*,Auto">
@@ -386,6 +388,7 @@
 
                 <!-- ── Active mode card ──────────────────────────── -->
                 <Border
+                    IsVisible="{Binding SupportsAnimationControl}"
                     Grid.Row="0"
                     Grid.Column="0"
                     BackgroundColor="#121C2B"
@@ -423,6 +426,7 @@
 
                 <!-- ── Brightness card ───────────────────────────── -->
                 <Border
+                    IsVisible="{Binding SupportsBrightnessControl}"
                     Grid.Row="0"
                     Grid.Column="1"
                     BackgroundColor="#121C2B"
@@ -460,6 +464,7 @@
 
                 <!-- ── Wi-Fi status card ─────────────────────────── -->
                 <Border
+                    IsVisible="{Binding HasWifiOrClockStatus}"
                     Grid.Row="1"
                     Grid.Column="0"
                     BackgroundColor="#121C2B"
@@ -478,18 +483,21 @@
                             VerticalOptions="Center">
 
                             <Label
+                                IsVisible="{Binding SupportsWifiProvisioning}"
                                 Text="WI-FI"
                                 FontSize="10"
                                 CharacterSpacing="1"
                                 TextColor="#8495AE" />
 
                             <Label
+                                IsVisible="{Binding SupportsWifiProvisioning}"
                                 Text="{Binding WifiText}"
                                 FontSize="20"
                                 FontAttributes="Bold"
                                 TextColor="#72C9A0" />
 
                             <Label
+                                IsVisible="{Binding SupportsClockStatus}"
                                 Text="{Binding TimeText}"
                                 FontSize="10"
                                 TextColor="#7789A3" />
@@ -497,6 +505,7 @@
                         </VerticalStackLayout>
 
                         <Button
+                            IsVisible="{Binding SupportsWifiProvisioning}"
                             Grid.Column="1"
                             Text="CONFIG"
                             Clicked="OnWifiConfigurationClicked"
@@ -516,6 +525,7 @@
 
                 <!-- ── Motion sensor card ────────────────────────── -->
                 <Border
+                    IsVisible="{Binding SupportsMotionTelemetry}"
                     Grid.Row="1"
                     Grid.Column="1"
                     BackgroundColor="#121C2B"
@@ -554,7 +564,10 @@
 
 
             <!-- ── Brightness control ────────────────────────────── -->
-            <VerticalStackLayout Spacing="8" Margin="0,4,0,0">
+            <VerticalStackLayout 
+                IsVisible="{Binding SupportsBrightnessControl}"
+                Spacing="8" 
+                Margin="0,4,0,0">
 
                 <Grid ColumnDefinitions="*,Auto">
                     <Label
@@ -602,7 +615,9 @@
         <!-- ======================================================== -->
         <!-- 5. ANIMATION MODES                                       -->
         <!-- ======================================================== -->
-        <VerticalStackLayout Spacing="12">
+        <VerticalStackLayout 
+            IsVisible="{Binding SupportsAnimationControl}"
+            Spacing="12">
 
             <!-- Animation section heading -->
             <Grid ColumnDefinitions="*,Auto">

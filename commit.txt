@@ -1,2 +1,2 @@
 APP: Recommendation 1 — Capability-driven UI
-Step 1A — Make Home device cards capability-driven
+Step 1B — Capability-driven workspace panels

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using DMXENTIX.Hub.ViewModels;
+using DMXENTIX.Hub.Models.Devices;
 
 namespace DMXENTIX.Hub.Views;
 
@@ -7,6 +8,7 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
 {
     private readonly DeviceWorkspaceViewModel _viewModel;
     private readonly WifiProvisioningViewModel _wifiProvisioningViewModel;
+    private readonly Emotix360DashboardViewModel _dashboardViewModel;
 
     private string? _deviceId;
 
@@ -20,8 +22,10 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
     {
         InitializeComponent();
 
+
         _viewModel = viewModel;
         _wifiProvisioningViewModel = wifiProvisioningViewModel;
+        _dashboardViewModel = dashboardViewModel;
 
         BindingContext = _viewModel;
 
@@ -66,8 +70,7 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
         object? sender,
         EventArgs e)
     {
-        if (!_viewModel.IsEmotix360Workspace ||
-            !_viewModel.IsConnected)
+        if (!_viewModel.IsWifiProvisioningVisible)
         {
             return;
         }
@@ -171,6 +174,10 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
     {
         base.OnAppearing();
 
+        // Prevent capabilities from a previously selected device
+        // from remaining active while this workspace is loading.
+        _dashboardViewModel.SetCapabilities(DeviceCapabilities.None);
+
         // Bind the provisioning interface to this workspace's session.
         _viewModel.WorkspaceSessionChanged -=
             _wifiProvisioningViewModel.SetSession;
@@ -183,6 +190,9 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
         if (!string.IsNullOrWhiteSpace(_deviceId))
         {
             await _viewModel.LoadDeviceAsync(_deviceId);
+
+            // Apply the capabilities belonging to the selected record.
+            _dashboardViewModel.SetCapabilities(_viewModel.Capabilities);
         }
     }
 

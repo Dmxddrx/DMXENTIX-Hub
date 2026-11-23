@@ -118,14 +118,58 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
     public bool IsSoundNodeWorkspace =>
         _record?.DeviceType == AppDeviceType.SoundNode;
 
+    public DeviceCapabilities Capabilities =>
+        _record?.Capabilities ?? DeviceCapabilities.None;
+
+    private bool Supports(DeviceCapabilities capability) =>
+        (Capabilities & capability) == capability;
+
+    public bool SupportsAnimationControl =>
+        Supports(DeviceCapabilities.AnimationControl);
+
+    public bool SupportsBrightnessControl =>
+        Supports(DeviceCapabilities.BrightnessControl);
+
+    public bool SupportsWifiProvisioning =>
+        Supports(DeviceCapabilities.WifiProvisioning);
+
+    public bool SupportsMotionTelemetry =>
+        Supports(DeviceCapabilities.MotionTelemetry);
+
+    public bool SupportsClockStatus =>
+        Supports(DeviceCapabilities.ClockStatus);
+
+    public bool SupportsAudioLevelTelemetry =>
+        Supports(DeviceCapabilities.AudioLevelTelemetry);
+
+    public bool SupportsChipTemperatureTelemetry =>
+        Supports(DeviceCapabilities.ChipTemperatureTelemetry);
+
+    public bool HasEmotix360DashboardCapabilities =>
+        SupportsAnimationControl ||
+        SupportsBrightnessControl ||
+        SupportsWifiProvisioning ||
+        SupportsMotionTelemetry ||
+        SupportsClockStatus;
+
+    public bool HasSoundNodeDashboardCapabilities =>
+        SupportsAudioLevelTelemetry ||
+        SupportsChipTemperatureTelemetry;
+
     public bool IsSoundNodeDashboardVisible =>
-        IsSoundNodeWorkspace && IsConnected;
+        IsSoundNodeWorkspace &&
+        IsConnected &&
+        HasSoundNodeDashboardCapabilities;
 
     public bool IsDashboardVisible =>
-        IsEmotix360Workspace && IsConnected;
+        IsEmotix360Workspace &&
+        IsConnected &&
+        HasEmotix360DashboardCapabilities;
 
     public bool IsWifiProvisioningVisible =>
-        IsEmotix360Workspace && IsConnected;
+        IsEmotix360Workspace &&
+        IsConnected &&
+        SupportsWifiProvisioning;
 
     public bool IsWorkspaceMessageVisible =>
         !IsDashboardVisible &&
@@ -192,11 +236,12 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
                 OnPropertyChanged(nameof(ConnectionStatusText));
                 OnPropertyChanged(nameof(ConnectionStatusColor));
                 OnPropertyChanged(nameof(WorkspaceMessage));
+                OnPropertyChanged(nameof(SoundNodeTelemetryStatusText));
+                OnPropertyChanged(nameof(Capabilities));
                 OnPropertyChanged(nameof(IsDashboardVisible));
                 OnPropertyChanged(nameof(IsSoundNodeDashboardVisible));
                 OnPropertyChanged(nameof(IsWorkspaceMessageVisible));
                 OnPropertyChanged(nameof(IsWifiProvisioningVisible));
-                OnPropertyChanged(nameof(SoundNodeTelemetryStatusText));
             }
         }
     }
@@ -238,10 +283,12 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
 
             if (IsEmotix360Workspace)
             {
-                return
-                    "EMOTIX360 is connected. Its dashboard and Wi-Fi " +
-                    "controls will be integrated into this workspace in " +
-                    "the next stages.";
+                return "This EMOTIX360 device has no dashboard capabilities declared.";
+            }
+
+            if (IsSoundNodeWorkspace)
+            {
+                return "This SoundNode device has no telemetry capabilities declared.";
             }
 
             return
@@ -623,5 +670,18 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
         OnPropertyChanged(nameof(IsWifiProvisioningVisible));
         OnPropertyChanged(nameof(HasFirmwareInfo));
         OnPropertyChanged(nameof(FirmwareInfoText));
+        OnPropertyChanged(nameof(Capabilities));
+
+        OnPropertyChanged(nameof(SupportsAnimationControl));
+        OnPropertyChanged(nameof(SupportsBrightnessControl));
+        OnPropertyChanged(nameof(SupportsWifiProvisioning));
+        OnPropertyChanged(nameof(SupportsMotionTelemetry));
+        OnPropertyChanged(nameof(SupportsClockStatus));
+
+        OnPropertyChanged(nameof(SupportsAudioLevelTelemetry));
+        OnPropertyChanged(nameof(SupportsChipTemperatureTelemetry));
+
+        OnPropertyChanged(nameof(HasEmotix360DashboardCapabilities));
+        OnPropertyChanged(nameof(HasSoundNodeDashboardCapabilities));
     }
 }

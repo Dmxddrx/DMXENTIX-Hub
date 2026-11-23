@@ -8,7 +8,11 @@
 
     <VerticalStackLayout Spacing="16">
 
-        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+        <Grid 
+            IsVisible="{Binding SupportsAudioLevelTelemetry}"
+            ColumnDefinitions="*,Auto" 
+            ColumnSpacing="10">
+            
             <VerticalStackLayout Spacing="5">
                 <Label
                     Text="AUDIO MONITORING"
@@ -42,7 +46,10 @@
             </Border>
         </Grid>
 
-        <Grid ColumnDefinitions="*,*" ColumnSpacing="11">
+        <Grid 
+            IsVisible="{Binding SupportsAudioLevelTelemetry}"
+            ColumnDefinitions="*,*" 
+            ColumnSpacing="11">
 
             <Border
                 Grid.Column="0"
@@ -105,6 +112,7 @@
         </Grid>
 
         <Border
+            IsVisible="{Binding SupportsChipTemperatureTelemetry}"
             BackgroundColor="#121C2B"
             Stroke="#26364A"
             StrokeThickness="1"
@@ -138,6 +146,7 @@
         </Border>
 
         <Border
+            IsVisible="{Binding SupportsAudioLevelTelemetry}"
             BackgroundColor="#142135"
             Stroke="#263C58"
             StrokeThickness="1"

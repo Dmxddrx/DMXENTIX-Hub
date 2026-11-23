@@ -6,6 +6,7 @@ using DMXENTIX.Hub.Services;
 using Microsoft.Maui.Graphics;
 using DMXENTIX.Hub.Services.Bluetooth;
 using AppDeviceType = global::DMXENTIX.Hub.Models.Devices.DeviceType;
+using DMXENTIX.Hub.Models.Devices;
 
 namespace DMXENTIX.Hub.ViewModels;
 
@@ -26,6 +27,53 @@ public sealed class Emotix360DashboardViewModel : ObservableObject
     private double _brightnessValue = 5;
     private string _timeText = "--";
 
+    private DeviceCapabilities _capabilities = DeviceCapabilities.None;
+
+    private bool Supports(DeviceCapabilities capability) =>
+        (_capabilities & capability) == capability;
+
+    public bool SupportsAnimationControl =>
+        Supports(DeviceCapabilities.AnimationControl);
+
+    public bool SupportsBrightnessControl =>
+        Supports(DeviceCapabilities.BrightnessControl);
+
+    public bool SupportsWifiProvisioning =>
+        Supports(DeviceCapabilities.WifiProvisioning);
+
+    public bool SupportsMotionTelemetry =>
+        Supports(DeviceCapabilities.MotionTelemetry);
+
+    public bool SupportsClockStatus =>
+        Supports(DeviceCapabilities.ClockStatus);
+
+    public bool HasWifiOrClockStatus =>
+        SupportsWifiProvisioning || SupportsClockStatus;
+
+    public bool HasOverviewCapabilities =>
+        SupportsAnimationControl ||
+        SupportsBrightnessControl ||
+        SupportsWifiProvisioning ||
+        SupportsMotionTelemetry ||
+        SupportsClockStatus;
+
+    public void SetCapabilities(DeviceCapabilities capabilities)
+    {
+        if (_capabilities == capabilities)
+            return;
+
+        _capabilities = capabilities;
+
+        OnPropertyChanged(nameof(SupportsAnimationControl));
+        OnPropertyChanged(nameof(SupportsBrightnessControl));
+        OnPropertyChanged(nameof(SupportsWifiProvisioning));
+        OnPropertyChanged(nameof(SupportsMotionTelemetry));
+        OnPropertyChanged(nameof(SupportsClockStatus));
+        OnPropertyChanged(nameof(HasWifiOrClockStatus));
+        OnPropertyChanged(nameof(HasOverviewCapabilities));
+        SelectAnimationCommand.ChangeCanExecute();
+        ApplyBrightnessCommand.ChangeCanExecute();
+    }
     // --------------------------------------------------------
     // BRIGHTNESS PREVIEW STATE
     // --------------------------------------------------------
@@ -107,12 +155,14 @@ public sealed class Emotix360DashboardViewModel : ObservableObject
         _statusService = statusService;
 
         OpenDeviceCommand = new Command(async () => await Shell.Current.GoToAsync("//device"));
+
         SelectAnimationCommand = new Command<string>(
             async mode => await SelectAnimationAsync(mode),
-            _ => IsConnected);
+            _ => IsConnected && SupportsAnimationControl);
+
         ApplyBrightnessCommand = new Command(
             async () => await ApplyBrightnessAsync(),
-            () => IsConnected);
+            () => IsConnected && SupportsBrightnessControl);
 
         // Brightness slider interaction commands.
         BrightnessDragStartedCommand = new Command(
@@ -221,6 +271,14 @@ public sealed class Emotix360DashboardViewModel : ObservableObject
 
     private async Task SelectAnimationAsync(string? wireName)
     {
+        if (!SupportsAnimationControl)
+        {
+            DashboardMessage =
+                "Animation control is not supported by this device.";
+
+            return;
+        }
+
         IDeviceSession? session = _session;
 
         if (!IsConnected || session is null || !session.IsConnected)
@@ -516,6 +574,14 @@ public sealed class Emotix360DashboardViewModel : ObservableObject
 
     private async Task ApplyBrightnessAsync()
     {
+        if (!SupportsBrightnessControl)
+        {
+            DashboardMessage =
+                "Brightness control is not supported by this device.";
+
+            return;
+        }
+
         IDeviceSession? session = _session;
 
         if (!IsConnected || session is null || !session.IsConnected)
