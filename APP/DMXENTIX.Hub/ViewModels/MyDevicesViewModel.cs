@@ -17,16 +17,20 @@ public sealed class MyDevicesViewModel : ObservableObject
 
     private readonly SemaphoreSlim _refreshSemaphore = new(1, 1);
 
+    private readonly DeviceConnectionSupervisor _connectionSupervisor;
+
     private bool _isRefreshing;
     public bool CanRefresh => !IsRefreshing;
     private string _statusMessage = "Loading saved devices...";
 
     public MyDevicesViewModel(
         DeviceRegistryService deviceRegistry,
-        BleConnectionManager connectionManager)
+        BleConnectionManager connectionManager,
+        DeviceConnectionSupervisor connectionSupervisor)
     {
         _deviceRegistry = deviceRegistry;
         _connectionManager = connectionManager;
+        _connectionSupervisor = connectionSupervisor;
 
         RefreshCommand = new Command(
             async () => await RefreshAsync(),
@@ -305,6 +309,15 @@ public sealed class MyDevicesViewModel : ObservableObject
                 card.DeviceId,
                 newValue
             );
+
+            // When the user enables Auto Reconnect, clear any previous
+            // manual-disconnect suppression and start reconciliation.
+            if (newValue)
+            {
+                await _connectionSupervisor.AllowAutoReconnectAsync(
+                    card.DeviceId
+                );
+            }
         }
         catch (Exception ex)
         {

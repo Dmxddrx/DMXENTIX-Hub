@@ -40,8 +40,10 @@ public static class MauiProgram
 
         // Multi-device session manager.
         builder.Services.AddSingleton<BleConnectionManager>();
-
         builder.Services.AddSingleton<DeviceSessionSelectionService>();
+
+        // Multi-device automatic reconnection supervisor.
+        builder.Services.AddSingleton<DeviceConnectionSupervisor>();
 
         // Existing connection service remains temporarily for compatibility.
         builder.Services.AddSingleton<BluetoothService>();

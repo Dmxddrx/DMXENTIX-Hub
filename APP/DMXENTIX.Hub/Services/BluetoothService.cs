@@ -90,6 +90,7 @@ public sealed class BluetoothService
     private readonly HashSet<Guid> _connectedSessionIds = new();
 
     private readonly DeviceSessionSelectionService _sessionSelection;
+    private readonly DeviceConnectionSupervisor _connectionSupervisor;
 
     private IDeviceSession? _activeSession;
 
@@ -101,12 +102,14 @@ public sealed class BluetoothService
         BleCentralService bleCentral,
         BleConnectionManager connectionManager,
         DeviceDiscoveryService discovery,
-        DeviceSessionSelectionService sessionSelection)
+        DeviceSessionSelectionService sessionSelection,
+        DeviceConnectionSupervisor connectionSupervisor)
     {
         _bleCentral = bleCentral;
         _connectionManager = connectionManager;
         _discovery = discovery;
         _sessionSelection = sessionSelection;
+        _connectionSupervisor = connectionSupervisor;
 
         // Shared BLE discovery.
         _bleCentral.DeviceDiscovered += OnCentralDeviceDiscovered;
@@ -116,10 +119,14 @@ public sealed class BluetoothService
             OnCentralBluetoothPowerStateChanged;
 
         // Session lifecycle.
-        _connectionManager.SessionAdded += OnSessionAdded;
-        _connectionManager.SessionRemoved += OnSessionRemoved;
+        _connectionManager.SessionAdded += 
+            OnSessionAdded;
+        _connectionManager.SessionRemoved += 
+            OnSessionRemoved;
         _connectionManager.SessionStateChanged +=
             OnManagedSessionStateChanged;
+        _connectionSupervisor.ProgressChanged +=
+            OnSupervisorProgressChanged;
 
         // Attach to sessions that may already exist.
         foreach (IDeviceSession session in _connectionManager.Sessions)
@@ -181,16 +188,8 @@ public sealed class BluetoothService
     // AUTOMATIC CONNECTION STATE
     // ========================================================
 
-    public bool IsAutoConnecting
-    {
-        get
-        {
-            lock (_autoConnectLock)
-            {
-                return _autoConnectCts is not null;
-            }
-        }
-    }
+    public bool IsAutoConnecting =>
+        _connectionSupervisor.IsReconnecting;
 
     // ========================================================
     // REMEMBERED DEVICE IDENTITY
@@ -267,6 +266,8 @@ public sealed class BluetoothService
 
     public async Task ConnectAsync(Guid deviceId)
     {
+        _connectionSupervisor.NotifyManualConnect(deviceId);
+
         // Determine which product is being connected.
         DiscoveredDeviceInfo? discoveredDevice =
             _discovery.DiscoveredDevices.FirstOrDefault(
@@ -352,6 +353,8 @@ public sealed class BluetoothService
         string productName,
         CancellationToken cancellationToken = default)
     {
+        _connectionSupervisor.NotifyManualConnect(deviceId);
+
         // The legacy automatic reconnection workflow belongs
         // exclusively to EMOTIX360.
         if (deviceType == AppDeviceType.Emotix360)
@@ -443,6 +446,10 @@ public sealed class BluetoothService
             if (session is null)
                 return;
 
+            _connectionSupervisor.NotifyManualDisconnect(
+                session.DeviceId
+            );
+
             await _connectionManager.DisconnectAsync(
                 session.DeviceId
             );
@@ -475,6 +482,10 @@ public sealed class BluetoothService
 
         if (session is null)
             return;
+
+        _connectionSupervisor.NotifyManualDisconnect(
+            deviceId
+        );
 
         // Suppress automatic EMOTIX360 reconnection before
         // starting its manual disconnection.
@@ -561,34 +572,33 @@ public sealed class BluetoothService
     }
 
     // ========================================================
-    // AUTOMATIC CONNECTION ENTRY POINT
+    // AUTOMATIC CONNECTION COMPATIBILITY
     // ========================================================
 
     public void StartAutoConnect()
     {
-        if (IsConnected)
-            return;
-
-        _manualDisconnectRequested = false;
-
-#if ANDROID
-        // Keep Android active during connection attempts and
-        // subsequent automatic reconnection.
-        BleForegroundServiceController.Start();
-#endif
-
-        StartAutoConnectCore();
+        _ = StartConnectionSupervisorAsync();
     }
 
     // Called when Android recreates the sticky foreground service.
+    // Step 7C will complete the dedicated foreground-service integration.
     internal void ResumeAutoConnectFromForegroundService()
     {
-        if (IsConnected)
-            return;
+        _ = StartConnectionSupervisorAsync();
+    }
 
-        _manualDisconnectRequested = false;
-
-        StartAutoConnectCore();
+    private async Task StartConnectionSupervisorAsync()
+    {
+        try
+        {
+            await _connectionSupervisor.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[BLE] Could not start connection supervisor: {ex.Message}"
+            );
+        }
     }
 
     private void StartAutoConnectCore()
@@ -1171,13 +1181,6 @@ public sealed class BluetoothService
                 false,
                 "The device disconnected."
             );
-
-            // Recover only an unexpected disconnection.
-            if (!_manualDisconnectRequested &&
-                RememberedDeviceId == session.DeviceId)
-            {
-                StartAutoConnect();
-            }
         }
     }
 
@@ -1314,17 +1317,8 @@ public sealed class BluetoothService
             return;
         }
 
-        // Bluetooth has turned ON.
-        if (_manualDisconnectRequested)
-            return;
-
-        WakeAutoConnectLoop();
-
-        // Resume automatic connection if no connection exists.
-        if (!IsConnected)
-        {
-            StartAutoConnectCore();
-        }
+        // DeviceConnectionSupervisor independently observes Bluetooth
+        // power changes and resumes all eligible saved-device connections.
     }
 
     private async Task HandleBluetoothUnavailableAsync()
@@ -1343,5 +1337,9 @@ public sealed class BluetoothService
                 $"[BLE] Bluetooth-off session cleanup failed: {ex.Message}"
             );
         }
+    }
+    private void OnSupervisorProgressChanged(string message)
+    {
+        ConnectionProgressChanged?.Invoke(message);
     }
 }
