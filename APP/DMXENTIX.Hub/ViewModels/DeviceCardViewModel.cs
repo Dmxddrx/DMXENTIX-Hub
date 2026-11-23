@@ -2,6 +2,9 @@
 using DMXENTIX.Hub.Models.Devices;
 using DMXENTIX.Hub.Services.Bluetooth;
 using Microsoft.Maui.Graphics;
+using System.Diagnostics;
+using DMXENTIX.Hub.Services;
+using Microsoft.Maui.Controls;
 
 using AppDeviceType =
     global::DMXENTIX.Hub.Models.Devices.DeviceType;
@@ -24,11 +27,30 @@ public sealed class DeviceCardViewModel : ObservableObject
     private bool _isDisconnecting;
     private bool _isEnablingBluetooth;
 
+    private readonly DeviceCommandService? _deviceCommandService;
+
+    private bool _isDeviceControlBusy;
+    private double _brightnessControlValue;
+    private bool _isBrightnessControlDirty;
+    private string _deviceControlErrorMessage = string.Empty;
+
     public DeviceCardViewModel(
         DeviceRecord record,
-        IDeviceSession? session)
+        IDeviceSession? session,
+        DeviceCommandService? deviceCommandService = null)
     {
         _record = record;
+        _deviceCommandService = deviceCommandService;
+
+        SetAnimationModeCommand = new Command<AnimationMode>(
+            async mode => await SetAnimationModeAsync(mode),
+            _ => CanUseDeviceControls
+        );
+
+        ApplyBrightnessCommand = new Command(
+            async () => await ApplyBrightnessAsync(),
+            () => CanApplyBrightness
+        );
 
         Update(record, session);
     }
@@ -183,6 +205,77 @@ public sealed class DeviceCardViewModel : ObservableObject
     }
 
     // ========================================================
+    // EMOTIX360 QUICK CONTROLS
+    // ========================================================
+
+    public Command<AnimationMode> SetAnimationModeCommand { get; }
+
+    public Command ApplyBrightnessCommand { get; }
+
+    public bool IsDeviceControlBusy =>
+        _isDeviceControlBusy;
+
+    public bool CanUseDeviceControls =>
+        IsEmotix360 &&
+        IsConnected &&
+        !_isDeviceControlBusy &&
+        _deviceCommandService is not null;
+
+    public bool CanApplyBrightness =>
+        CanUseDeviceControls &&
+        _isBrightnessControlDirty;
+
+    public double BrightnessControlValue
+    {
+        get =>
+            _isBrightnessControlDirty
+                ? _brightnessControlValue
+                : _emotixStatus?.Brightness ?? 0;
+
+        set
+        {
+            double clampedValue = Math.Clamp(value, 0d, 15d);
+
+            if (Math.Abs(_brightnessControlValue - clampedValue) < 0.001 &&
+                _isBrightnessControlDirty)
+            {
+                return;
+            }
+
+            _brightnessControlValue = clampedValue;
+            _isBrightnessControlDirty = true;
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(BrightnessControlValueText));
+            OnPropertyChanged(nameof(CanApplyBrightness));
+
+            ApplyBrightnessCommand.ChangeCanExecute();
+        }
+    }
+
+    public string BrightnessControlValueText
+    {
+        get
+        {
+            if (!IsConnected)
+                return "--";
+
+            if (_isBrightnessControlDirty)
+                return $"{Math.Round(_brightnessControlValue):0} / 15";
+
+            return _emotixStatus?.Brightness is int brightness
+                ? $"{brightness} / 15"
+                : "Waiting";
+        }
+    }
+
+    public string DeviceControlErrorMessage =>
+        _deviceControlErrorMessage;
+
+    public bool HasDeviceControlError =>
+        !string.IsNullOrWhiteSpace(_deviceControlErrorMessage);
+
+    // ========================================================
     // UPDATE BLUETOOTH AVAILABILITY
     // ========================================================
 
@@ -231,6 +324,8 @@ public sealed class DeviceCardViewModel : ObservableObject
         OnPropertyChanged(nameof(ConnectionActionText));
         OnPropertyChanged(nameof(ConnectionActionColor));
         OnPropertyChanged(nameof(CanChangeConnectionAction));
+
+        NotifyQuickControlProperties();
     }
 
     // ========================================================
@@ -424,6 +519,152 @@ public sealed class DeviceCardViewModel : ObservableObject
         BuildProductSummary(_record);
 
     // ========================================================
+    // SEND ANIMATION MODE COMMAND
+    // ========================================================
+
+    private Task SetAnimationModeAsync(AnimationMode mode)
+    {
+        IDeviceSession? session = _session;
+
+        if (!CanUseDeviceControls ||
+            session?.IsConnected != true ||
+            _deviceCommandService is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return RunDeviceControlAsync(
+            session,
+            activeSession =>
+                _deviceCommandService.SetModeAsync(activeSession, mode),
+            "Animation command"
+        );
+    }
+
+    // ========================================================
+    // SEND BRIGHTNESS COMMAND
+    // ========================================================
+
+    private Task ApplyBrightnessAsync()
+    {
+        IDeviceSession? session = _session;
+
+        if (!CanApplyBrightness ||
+            session?.IsConnected != true ||
+            _deviceCommandService is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        int brightness = (int)Math.Round(BrightnessControlValue);
+
+        return RunDeviceControlAsync(
+            session,
+            activeSession =>
+                _deviceCommandService.SetBrightnessAsync(
+                    activeSession,
+                    brightness
+                ),
+            "Brightness command"
+        );
+    }
+
+    // ========================================================
+    // EXECUTE DEVICE CONTROL SAFELY
+    // ========================================================
+
+    private async Task RunDeviceControlAsync(
+        IDeviceSession session,
+        Func<IDeviceSession, Task> sendCommand,
+        string operationName)
+    {
+        if (_deviceCommandService is null ||
+            _isDeviceControlBusy ||
+            !IsEmotix360 ||
+            !session.IsConnected)
+        {
+            return;
+        }
+
+        _deviceControlErrorMessage = string.Empty;
+
+        OnPropertyChanged(nameof(DeviceControlErrorMessage));
+        OnPropertyChanged(nameof(HasDeviceControlError));
+
+        SetDeviceControlBusy(true);
+
+        try
+        {
+            await sendCommand(session);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[HomeDeviceCard] {operationName} failed: {ex}"
+            );
+
+            _deviceControlErrorMessage =
+                $"{operationName} failed: {ex.Message}";
+
+            OnPropertyChanged(nameof(DeviceControlErrorMessage));
+            OnPropertyChanged(nameof(HasDeviceControlError));
+        }
+        finally
+        {
+            SetDeviceControlBusy(false);
+        }
+    }
+
+    // ========================================================
+    // DEVICE CONTROL BUSY STATE
+    // ========================================================
+
+    private void SetDeviceControlBusy(bool isBusy)
+    {
+        _isDeviceControlBusy = isBusy;
+
+        NotifyQuickControlProperties();
+    }
+
+    // ========================================================
+    // SYNCHRONIZE BRIGHTNESS FROM DEVICE TELEMETRY
+    // ========================================================
+
+    private void UpdateBrightnessFromStatus(int brightness)
+    {
+        // Keep the user's pending slider selection until the device
+        // reports the same brightness value.
+        if (_isBrightnessControlDirty &&
+            Math.Round(_brightnessControlValue) != brightness)
+        {
+            return;
+        }
+
+        _brightnessControlValue = brightness;
+        _isBrightnessControlDirty = false;
+
+        NotifyQuickControlProperties();
+    }
+
+    // ========================================================
+    // QUICK CONTROL PROPERTY NOTIFICATIONS
+    // ========================================================
+
+    private void NotifyQuickControlProperties()
+    {
+        OnPropertyChanged(nameof(IsDeviceControlBusy));
+        OnPropertyChanged(nameof(CanUseDeviceControls));
+        OnPropertyChanged(nameof(CanApplyBrightness));
+        OnPropertyChanged(nameof(BrightnessControlValue));
+        OnPropertyChanged(nameof(BrightnessControlValueText));
+        OnPropertyChanged(nameof(DeviceControlErrorMessage));
+        OnPropertyChanged(nameof(HasDeviceControlError));
+
+        SetAnimationModeCommand.ChangeCanExecute();
+        ApplyBrightnessCommand.ChangeCanExecute();
+    }
+
+    // ========================================================
     // UPDATE DEVICE RECORD AND SESSION
     // ========================================================
 
@@ -497,6 +738,11 @@ public sealed class DeviceCardViewModel : ObservableObject
             {
                 _emotixStatus = status;
 
+                if (status.Brightness is int brightness)
+                {
+                    UpdateBrightnessFromStatus(brightness);
+                }
+
                 NotifyLiveStatusProperties();
             }
 
@@ -525,6 +771,11 @@ public sealed class DeviceCardViewModel : ObservableObject
         _soundNodeTelemetry = null;
 
         NotifyLiveStatusProperties();
+
+        _isBrightnessControlDirty = false;
+        _deviceControlErrorMessage = string.Empty;
+
+        NotifyQuickControlProperties();
     }
 
     // ========================================================
