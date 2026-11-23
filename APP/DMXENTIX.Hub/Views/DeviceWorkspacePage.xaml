@@ -17,33 +17,56 @@
             Padding="22,26,22,30"
             Spacing="20">
 
-            <!-- ================================================= -->
-            <!-- HEADER                                            -->
-            <!-- ================================================= -->
+                <!-- ================================================= -->
+                <!-- HEADER                                            -->
+                <!-- ================================================= -->
 
-            <VerticalStackLayout Spacing="5">
+                <Grid
+                    ColumnDefinitions="*,Auto"
+                    ColumnSpacing="12">
 
-                <Label
-                    Text="DEVICE WORKSPACE"
-                    FontSize="11"
-                    CharacterSpacing="2"
-                    FontAttributes="Bold"
-                    TextColor="#5796FF" />
+                    <VerticalStackLayout
+                        Grid.Column="0"
+                        Spacing="5">
 
-                <Label
-                    Text="{Binding DisplayName}"
-                    FontSize="30"
-                    FontAttributes="Bold"
-                    TextColor="#F2F5FC" />
+                        <Label
+                            Text="DEVICE WORKSPACE"
+                            FontSize="11"
+                            CharacterSpacing="2"
+                            FontAttributes="Bold"
+                            TextColor="#5796FF" />
 
-                <Label
-                    Text="{Binding DeviceTypeText}"
-                    FontSize="11"
-                    CharacterSpacing="1"
-                    FontAttributes="Bold"
-                    TextColor="#78A8FF" />
+                        <Label
+                            Text="{Binding DisplayName}"
+                            FontSize="30"
+                            FontAttributes="Bold"
+                            TextColor="#F2F5FC" />
 
-            </VerticalStackLayout>
+                        <Label
+                            Text="{Binding DeviceTypeText}"
+                            FontSize="11"
+                            CharacterSpacing="1"
+                            FontAttributes="Bold"
+                            TextColor="#78A8FF" />
+
+                    </VerticalStackLayout>
+
+                    <!-- DEVICE INFORMATION BUTTON -->
+
+                    <Button
+                        Grid.Column="1"
+                        Text="INFO"
+                        Clicked="OnShowInfoClicked"
+                        BackgroundColor="#263C58"
+                        TextColor="#C0D7FA"
+                        FontSize="10"
+                        FontAttributes="Bold"
+                        Padding="14,9"
+                        CornerRadius="9"
+                        IsVisible="{Binding HasRecord}"
+                        VerticalOptions="Start" />
+
+                </Grid>
 
 
             <!-- ================================================= -->
@@ -135,98 +158,6 @@
 
 
             <!-- ================================================= -->
-            <!-- DEVICE INFORMATION                                -->
-            <!-- ================================================= -->
-
-            <Border
-                IsVisible="{Binding HasRecord}"
-                BackgroundColor="#121C2B"
-                Stroke="#26364A"
-                StrokeThickness="1"
-                Padding="17">
-
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="17" />
-                </Border.StrokeShape>
-
-                <VerticalStackLayout Spacing="13">
-
-                    <Label
-                        Text="DEVICE INFORMATION"
-                        FontSize="11"
-                        CharacterSpacing="1"
-                        FontAttributes="Bold"
-                        TextColor="#91A4BF" />
-
-                    <Grid ColumnDefinitions="*,Auto">
-
-                        <Label
-                            Text="Bluetooth name"
-                            FontSize="12"
-                            TextColor="#8999AF" />
-
-                        <Label
-                            Grid.Column="1"
-                            Text="{Binding AdvertisedName}"
-                            FontSize="12"
-                            FontAttributes="Bold"
-                            TextColor="#F2F5FC"
-                            HorizontalTextAlignment="End" />
-
-                    </Grid>
-
-                    <BoxView
-                        HeightRequest="1"
-                        Color="#26364A" />
-
-                    <Grid ColumnDefinitions="*,Auto">
-
-                        <Label
-                            Text="Last connected"
-                            FontSize="12"
-                            TextColor="#8999AF" />
-
-                        <Label
-                            Grid.Column="1"
-                            Text="{Binding LastConnectedText}"
-                            FontSize="12"
-                            FontAttributes="Bold"
-                            TextColor="#F2F5FC"
-                            HorizontalTextAlignment="End" />
-
-                    </Grid>
-
-                    <BoxView
-                        HeightRequest="1"
-                        Color="#26364A" />
-
-                    <Label
-                        Text="Registry ID"
-                        FontSize="11"
-                        TextColor="#8999AF" />
-
-                    <Label
-                        Text="{Binding RegistryDeviceIdText}"
-                        FontSize="10"
-                        TextColor="#B4C2D5"
-                        LineBreakMode="CharacterWrap" />
-
-                    <Label
-                        Text="Bluetooth transport ID"
-                        FontSize="11"
-                        TextColor="#8999AF" />
-
-                    <Label
-                        Text="{Binding BluetoothDeviceIdText}"
-                        FontSize="10"
-                        TextColor="#B4C2D5"
-                        LineBreakMode="CharacterWrap" />
-
-                </VerticalStackLayout>
-
-            </Border>
-
-            <!-- ================================================= -->
             <!-- FOOTER                                            -->
             <!-- ================================================= -->
 
@@ -311,7 +242,236 @@
             </ScrollView>
 
         </Grid>
-        
+
+        <!-- ================================================= -->
+        <!-- DEVICE INFORMATION POPUP                          -->
+        <!-- ================================================= -->
+
+        <Grid
+    x:Name="DeviceInfoPopup"
+    IsVisible="False"
+    ZIndex="20">
+
+            <!-- DIMMED BACKGROUND -->
+
+            <BoxView BackgroundColor="#C20B111B">
+
+                <BoxView.GestureRecognizers>
+
+                    <TapGestureRecognizer
+                Tapped="OnInfoPopupBackgroundTapped" />
+
+                </BoxView.GestureRecognizers>
+
+            </BoxView>
+
+            <!-- POPUP CARD -->
+
+            <Border
+        BackgroundColor="#142135"
+        Stroke="#397FE8"
+        StrokeThickness="1"
+        Padding="19"
+        Margin="24"
+        MaximumWidthRequest="460"
+        HorizontalOptions="Center"
+        VerticalOptions="Center">
+
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="20" />
+                </Border.StrokeShape>
+
+                <VerticalStackLayout Spacing="15">
+
+                    <!-- POPUP HEADER -->
+
+                    <Grid ColumnDefinitions="*,Auto">
+
+                        <VerticalStackLayout Spacing="4">
+
+                            <Label
+                        Text="DEVICE INFORMATION"
+                        FontSize="10"
+                        CharacterSpacing="1.5"
+                        FontAttributes="Bold"
+                        TextColor="#5796FF" />
+
+                            <Label
+                        Text="{Binding DisplayName}"
+                        FontSize="21"
+                        FontAttributes="Bold"
+                        TextColor="#F2F5FC" />
+
+                        </VerticalStackLayout>
+
+                        <Button
+                    Grid.Column="1"
+                    Text="✕"
+                    Clicked="OnCloseInfoPopupClicked"
+                    BackgroundColor="#263C58"
+                    TextColor="White"
+                    FontSize="16"
+                    Padding="10,5"
+                    CornerRadius="9"
+                    VerticalOptions="Start" />
+
+                    </Grid>
+
+                    <BoxView
+                HeightRequest="1"
+                Color="#263C58" />
+
+                    <ScrollView MaximumHeightRequest="460">
+
+                        <VerticalStackLayout Spacing="13">
+
+                            <!-- CONNECTION -->
+
+                            <Grid ColumnDefinitions="*,Auto">
+
+                                <Label
+                                    Text="Device Connection"
+                                    FontSize="12"
+                                    TextColor="#8999AF" />
+
+                                <Label
+                                    Grid.Column="1"
+                                    Text="{Binding ConnectionStatusText}"
+                                    TextColor="{Binding ConnectionStatusColor}"
+                                    FontSize="12"
+                                    FontAttributes="Bold" />
+
+                            </Grid>
+
+                            <BoxView
+                                HeightRequest="1"
+                                Color="#263C58" />
+
+                            <!-- DEVICE NAME -->
+
+                            <VerticalStackLayout Spacing="4">
+
+                                <Label
+                                    Text="Device name"
+                                    FontSize="10"
+                                    TextColor="#8999AF" />
+
+                                <Label
+                                    Text="{Binding DisplayName}"
+                                    FontSize="12"
+                                    TextColor="#F2F5FC" />
+
+                            </VerticalStackLayout>
+
+                            <!-- BLUETOOTH NAME -->
+
+                            <VerticalStackLayout Spacing="4">
+
+                                <Label
+                                    Text="Bluetooth advertised name"
+                                    FontSize="10"
+                                    TextColor="#8999AF" />
+
+                                <Label
+                                    Text="{Binding AdvertisedName}"
+                                    FontSize="12"
+                                    TextColor="#C0CCDD" />
+
+                            </VerticalStackLayout>
+
+                            <!-- LAST CONNECTION -->
+
+                            <VerticalStackLayout Spacing="4">
+
+                                <Label
+                                    Text="Last connected"
+                                    FontSize="10"
+                                    TextColor="#8999AF" />
+
+                                <Label
+                                    Text="{Binding LastConnectedText}"
+                                    FontSize="12"
+                                    TextColor="#C0CCDD" />
+
+                            </VerticalStackLayout>
+
+                            <BoxView
+                                HeightRequest="1"
+                                Color="#263C58" />
+
+                            <!-- REGISTRY ID -->
+
+                            <VerticalStackLayout Spacing="4">
+
+                                <Label
+                                    Text="Registry ID"
+                                    FontSize="10"
+                                    TextColor="#8999AF" />
+
+                                <Label
+                                    Text="{Binding RegistryDeviceIdText}"
+                                    FontSize="10"
+                                    TextColor="#C0CCDD"
+                                    LineBreakMode="CharacterWrap" />
+
+                            </VerticalStackLayout>
+
+                            <!-- BLUETOOTH TRANSPORT ID -->
+
+                            <VerticalStackLayout Spacing="4">
+
+                                <Label
+                                    Text="Bluetooth transport ID"
+                                    FontSize="10"
+                                    TextColor="#8999AF" />
+
+                                <Label
+                                    Text="{Binding BluetoothDeviceIdText}"
+                                    FontSize="10"
+                                    TextColor="#C0CCDD"
+                                    LineBreakMode="CharacterWrap" />
+
+                            </VerticalStackLayout>
+
+                            <!-- FIRMWARE AND PROTOCOL -->
+
+                            <VerticalStackLayout
+                                IsVisible="{Binding HasFirmwareInfo}"
+                                Spacing="4">
+
+                                <Label
+                                    Text="Firmware / Protocol"
+                                    FontSize="10"
+                                    TextColor="#8999AF" />
+
+                                <Label
+                                    Text="{Binding FirmwareInfoText}"
+                                    FontSize="11"
+                                    TextColor="#C0CCDD" />
+
+                            </VerticalStackLayout>
+
+                        </VerticalStackLayout>
+
+                    </ScrollView>
+
+                    <!-- CLOSE BUTTON -->
+
+                    <Button
+                        Text="CLOSE"
+                        Clicked="OnCloseInfoPopupClicked"
+                        BackgroundColor="#397FE8"
+                        TextColor="White"
+                        FontAttributes="Bold"
+                        HeightRequest="45"
+                        CornerRadius="11" />
+
+                </VerticalStackLayout>
+
+            </Border>
+
+        </Grid>
+
     </Grid>
 
 </ContentPage>

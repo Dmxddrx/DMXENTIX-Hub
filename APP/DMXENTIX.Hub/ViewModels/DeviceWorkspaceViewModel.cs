@@ -7,6 +7,7 @@ using DMXENTIX.Hub.Services.Devices;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using AppDeviceType = global::DMXENTIX.Hub.Models.Devices.DeviceType;
+using Microsoft.Maui.Graphics;
 
 namespace DMXENTIX.Hub.ViewModels;
 
@@ -88,6 +89,29 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
             ? lastConnected.ToLocalTime().ToString("g")
             : "Not yet connected";
 
+    public bool HasFirmwareInfo =>
+        !string.IsNullOrWhiteSpace(FirmwareInfoText);
+
+    public string FirmwareInfoText
+    {
+        get
+        {
+            List<string> details = [];
+
+            if (!string.IsNullOrWhiteSpace(_record?.FirmwareVersion))
+            {
+                details.Add($"Firmware {_record.FirmwareVersion}");
+            }
+
+            if (_record?.ProtocolVersion is int protocolVersion)
+            {
+                details.Add($"Protocol v{protocolVersion}");
+            }
+
+            return string.Join(" | ", details);
+        }
+    }
+
     public bool IsEmotix360Workspace =>
         _record?.DeviceType == AppDeviceType.Emotix360;
 
@@ -161,6 +185,7 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
             if (SetProperty(ref _isConnected, value))
             {
                 OnPropertyChanged(nameof(ConnectionStatusText));
+                OnPropertyChanged(nameof(ConnectionStatusColor));
                 OnPropertyChanged(nameof(WorkspaceMessage));
                 OnPropertyChanged(nameof(IsDashboardVisible));
                 OnPropertyChanged(nameof(IsWorkspaceMessageVisible));
@@ -171,6 +196,11 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
 
     public string ConnectionStatusText =>
         IsConnected ? "CONNECTED" : "SAVED · OFFLINE";
+
+    public Color ConnectionStatusColor =>
+        IsConnected
+            ? Color.FromArgb("#72C9A0")
+            : Color.FromArgb("#A0AEC0");
 
     // ========================================================
     // WORKSPACE STATUS
@@ -584,5 +614,7 @@ public sealed class DeviceWorkspaceViewModel : ObservableObject
         OnPropertyChanged(nameof(IsSoundNodeWorkspace));
         OnPropertyChanged(nameof(IsSoundNodeDashboardVisible));
         OnPropertyChanged(nameof(IsWifiProvisioningVisible));
+        OnPropertyChanged(nameof(HasFirmwareInfo));
+        OnPropertyChanged(nameof(FirmwareInfoText));
     }
 }

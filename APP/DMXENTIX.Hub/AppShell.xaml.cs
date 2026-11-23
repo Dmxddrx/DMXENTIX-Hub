@@ -43,6 +43,14 @@ public partial class AppShell : Shell
 
     protected override bool OnBackButtonPressed()
     {
+        // Close the EMOTIX360 device information popup before
+        // handling Wi-Fi configuration or workspace navigation.
+        if (CurrentPage is DeviceWorkspacePage infoWorkspacePage &&
+            infoWorkspacePage.TryCloseInfoPopup())
+        {
+            return true;
+        }
+
         // Close EMOTIX360 Wi-Fi configuration before
         // navigating away from the device workspace.
         if (CurrentPage is DeviceWorkspacePage workspacePage &&

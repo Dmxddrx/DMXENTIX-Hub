@@ -11,6 +11,7 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
     private string? _deviceId;
 
     private bool _isWifiConfigurationVisible;
+    private bool _isInfoPopupVisible;
 
     public DeviceWorkspacePage(
         DeviceWorkspaceViewModel viewModel,
@@ -109,6 +110,60 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
     }
 
     // ========================================================
+    // OPEN DEVICE INFORMATION POPUP
+    // ========================================================
+
+    private void OnShowInfoClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (!_viewModel.HasRecord)
+            return;
+
+        _isInfoPopupVisible = true;
+
+        DeviceInfoPopup.IsVisible = true;
+    }
+
+    // ========================================================
+    // CLOSE DEVICE INFORMATION POPUP
+    // ========================================================
+
+    private void OnCloseInfoPopupClicked(
+        object? sender,
+        EventArgs e)
+    {
+        CloseInfoPopup();
+    }
+
+    private void OnInfoPopupBackgroundTapped(
+        object? sender,
+        TappedEventArgs e)
+    {
+        CloseInfoPopup();
+    }
+
+    private void CloseInfoPopup()
+    {
+        _isInfoPopupVisible = false;
+
+        DeviceInfoPopup.IsVisible = false;
+    }
+
+    // Allow AppShell to close the popup before
+    // handling normal Android Back navigation.
+
+    public bool TryCloseInfoPopup()
+    {
+        if (!_isInfoPopupVisible)
+            return false;
+
+        CloseInfoPopup();
+
+        return true;
+    }
+
+    // ========================================================
     // LOAD WORKSPACE
     // ========================================================
 
@@ -137,6 +192,8 @@ public partial class DeviceWorkspacePage : ContentPage, IQueryAttributable
 
     protected override void OnDisappearing()
     {
+        CloseInfoPopup();
+
         CloseWifiConfigurationScreen();
 
         // Remove the workspace-to-provisioning connection.
