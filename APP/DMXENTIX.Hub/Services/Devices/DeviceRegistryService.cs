@@ -3,6 +3,7 @@ using DMXENTIX.Hub.Services.Storage;
 using Microsoft.Maui.Storage;
 using System.Diagnostics;
 using AppDeviceType = DMXENTIX.Hub.Models.Devices.DeviceType;
+using DMXENTIX.Hub.Services.Devices.Profiles;
 
 namespace DMXENTIX.Hub.Services.Devices;
 
@@ -22,12 +23,16 @@ public sealed class DeviceRegistryService
     private readonly IDeviceRegistryStore _store;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<DeviceRecord> _devices = [];
+    private readonly DeviceProfileCatalog _profileCatalog;
 
     private bool _isInitialized;
 
-    public DeviceRegistryService(IDeviceRegistryStore store)
+    public DeviceRegistryService(
+        IDeviceRegistryStore store,
+        DeviceProfileCatalog profileCatalog)
     {
         _store = store;
+        _profileCatalog = profileCatalog;
     }
 
     public event Action? DevicesChanged;
@@ -58,7 +63,12 @@ public sealed class DeviceRegistryService
 
             ValidateLoadedRecords(_devices);
 
-            registryChanged = TryImportLegacyEmotix360Record();
+            // Synchronize saved capability declarations with
+            // the currently registered product profiles.
+            registryChanged = RefreshCapabilitiesFromProfiles();
+
+            // Import the legacy EMOTIX360 record when required.
+            registryChanged |= TryImportLegacyEmotix360Record();
 
             if (registryChanged)
             {
@@ -289,7 +299,20 @@ public sealed class DeviceRegistryService
             cancellationToken
         );
     }
-
+    public Task SetCapabilitiesAsync(
+        string deviceId,
+        DeviceCapabilities capabilities,
+        CancellationToken cancellationToken = default)
+    {
+        return UpdateDeviceAsync(
+            deviceId,
+            existing => existing with
+            {
+                Capabilities = capabilities
+            },
+            cancellationToken
+        );
+    }
     public async Task<bool> RemoveAsync(
         string deviceId,
         CancellationToken cancellationToken = default)
@@ -425,11 +448,7 @@ public sealed class DeviceRegistryService
             IsFavorite = false,
             ProtocolVersion = 1,
             Capabilities =
-                DeviceCapabilities.AnimationControl |
-                DeviceCapabilities.BrightnessControl |
-                DeviceCapabilities.WifiProvisioning |
-                DeviceCapabilities.MotionTelemetry |
-                DeviceCapabilities.ClockStatus
+                _profileCatalog.GetCapabilities(AppDeviceType.Emotix360)
         };
 
         _devices.Add(legacyRecord);
@@ -523,6 +542,47 @@ public sealed class DeviceRegistryService
                 nameof(deviceId)
             );
         }
+    }
+
+    // ========================================================
+    // REFRESH SAVED DEVICE CAPABILITIES FROM PRODUCT PROFILES
+    // ========================================================
+
+    private bool RefreshCapabilitiesFromProfiles()
+    {
+        bool changed = false;
+
+        for (int index = 0; index < _devices.Count; index++)
+        {
+            DeviceRecord existing = _devices[index];
+
+            // Leave records without a registered product profile unchanged.
+            if (!_profileCatalog.TryGetProfile(
+                    existing.DeviceType,
+                    out IDeviceProfile? profile) ||
+                profile is null)
+            {
+                continue;
+            }
+
+            DeviceCapabilities currentCapabilities =
+                profile.Capabilities;
+
+            if (existing.Capabilities == currentCapabilities)
+                continue;
+
+            // Only update capabilities.
+            // Preserve custom names, favourites, reconnect settings
+            // and all device identity information.
+            _devices[index] = existing with
+            {
+                Capabilities = currentCapabilities
+            };
+
+            changed = true;
+        }
+
+        return changed;
     }
 
     private const string BluetoothProductName = "EMOTIX360";

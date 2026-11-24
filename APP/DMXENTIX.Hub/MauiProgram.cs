@@ -30,6 +30,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<IDeviceProfile, Emotix360DeviceProfile>();
         builder.Services.AddSingleton<IDeviceProfile, SoundNodeDeviceProfile>();
 
+        // Central product profile catalogue.
+        builder.Services.AddSingleton<DeviceProfileCatalog>();
+
         // Product discovery.
         builder.Services.AddSingleton<DeviceDiscoveryService>();
 

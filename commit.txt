@@ -1,2 +1,1 @@
-APP: Recommendation 1 — Capability-driven UI
-Step 1B — Capability-driven workspace panels
+APP: Recommendation 2 — User-defined device names

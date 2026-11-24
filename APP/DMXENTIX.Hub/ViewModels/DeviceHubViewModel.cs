@@ -550,13 +550,14 @@ public sealed class DeviceHubViewModel : ObservableObject
                     )
                 );
 
+            DiscoveredDeviceInfo? discovered =
+                _deviceDiscovery.DiscoveredDevices
+                    .FirstOrDefault(device =>
+                        device.Id == session.DeviceId
+                    );
+
             if (existingRecord is null)
             {
-                DiscoveredDeviceInfo? discovered =
-                    _deviceDiscovery.DiscoveredDevices
-                        .FirstOrDefault(device =>
-                            device.Id == session.DeviceId
-                        );
 
                 // The transport ID is used as a temporary
                 // registry identity until firmware provides
@@ -587,6 +588,17 @@ public sealed class DeviceHubViewModel : ObservableObject
                 await _deviceRegistry.AddOrUpdateAsync(newRecord);
 
                 existingRecord = newRecord;
+            }
+
+            else if (discovered is not null &&
+                     existingRecord.Capabilities != discovered.Capabilities)
+            {
+                // Refresh the saved capability declarations
+                // when an existing device is rediscovered.
+                await _deviceRegistry.SetCapabilitiesAsync(
+                    existingRecord.DeviceId,
+                    discovered.Capabilities
+                );
             }
 
             // Update the persistent connection timestamp.

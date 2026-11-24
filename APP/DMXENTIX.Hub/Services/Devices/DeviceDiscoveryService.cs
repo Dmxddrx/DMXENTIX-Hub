@@ -23,11 +23,11 @@ public sealed class DeviceDiscoveryService
 
     public DeviceDiscoveryService(
         BleCentralService bleCentral,
-        IEnumerable<IDeviceProfile> profiles)
+        DeviceProfileCatalog profileCatalog)
     {
         _bleCentral = bleCentral;
 
-        _profiles = profiles.ToArray();
+        _profiles = profileCatalog.Profiles;
 
         // Log the product profiles registered through dependency injection.
         foreach (IDeviceProfile profile in _profiles)
