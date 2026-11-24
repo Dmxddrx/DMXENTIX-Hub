@@ -6,6 +6,7 @@
 #include "water_animation.h"
 #include "sand_gravity.h"
 #include "small_animations.h"
+#include "display_manager.h"
 
 #include "bluetooth_manager.h"
 #include "mpu6050.h"
@@ -376,6 +377,11 @@ void applyMode(Mode newMode, Mode &activeMode)
 
     // Update the active mode.
     activeMode = newMode;
+
+    // Publish the actual active matrix animation to the OLED.
+    DisplayManager::setAnimationMode(
+        getModeName(activeMode)
+    );
 
     Serial.printf(
         "[ANIMATION] Active mode: %s (%u)\n",

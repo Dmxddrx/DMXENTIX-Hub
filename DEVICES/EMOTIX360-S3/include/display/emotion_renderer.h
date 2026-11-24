@@ -1,20 +1,47 @@
+
 #ifndef EMOTION_RENDERER_H
 #define EMOTION_RENDERER_H
 
+#include <Arduino.h>
 #include <Adafruit_GFX.h>
 
 namespace EmotionRenderer {
 
-// Draw the default pair of rounded-square robot eyes.
+// Available robot eye expressions.
+enum class Mood : uint8_t
+{
+    NEUTRAL,
+    HAPPY,
+    TIRED,
+    ANGRY,
+    SURPRISED
+};
+
+// Draw and update the robot eyes.
 //
-// The renderer adapts its eye dimensions to landscape and
-// portrait OLED orientations.
+// Landscape: animated face.
+// Portrait: existing static eye design.
 //
-// The DisplayManager retains ownership of the OLED hardware.
+// DisplayManager retains ownership of the OLED.
+void drawRobotEyes(
+    Adafruit_GFX &canvas,
+    uint32_t nowMs
+);
+
+// Draw the existing static rounded-square eyes.
 void drawNeutralEyes(
     Adafruit_GFX &canvas,
     uint16_t color = 1
 );
+
+// Change the requested eye expression.
+void setMood(Mood mood);
+
+// Get the requested eye expression.
+Mood getMood();
+
+// Reset animation state.
+void reset();
 
 }
 

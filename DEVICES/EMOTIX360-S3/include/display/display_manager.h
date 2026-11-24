@@ -17,6 +17,7 @@ struct Status {
 
     bool wifiConnected = false;
     bool ntpSynced = false;
+    bool bleConnected = false;
 
     char ipAddress[16] = "-";
     char modeName[24] = "EMOTIX360";
@@ -59,7 +60,8 @@ void setApplicationStatus(
     const char *modeName
 );
 
-// Move to the next OLED page.
+void setBluetoothStatus(bool connected);
+void setAnimationMode(const char *modeName);
 bool nextPage();
 
 void requestUpdate();

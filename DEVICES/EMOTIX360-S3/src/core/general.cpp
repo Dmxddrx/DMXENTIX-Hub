@@ -57,6 +57,10 @@ void clockStatusTask(void *parameter)
                 localTime,
                 timeValid
             );
+            // Keep BLE connection state available to the Network page.
+            DisplayManager::setBluetoothStatus(
+                BluetoothManager::isConnected()
+            );
         }
 
         // Update the clock once per second.

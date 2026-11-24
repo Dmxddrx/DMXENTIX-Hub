@@ -1,7 +1,6 @@
 #include "display_manager.h"
 
 #include "fonts.h"
-#include "icons.h"
 #include "mpu6050.h"
 #include "i2c_manager.h"
 #include "device_config.h"
@@ -23,23 +22,12 @@ namespace DisplayManager {
 namespace {
 
 SemaphoreHandle_t statusMutex = nullptr;
-SemaphoreHandle_t logMutex = nullptr;
 
 constexpr int DISPLAY_NATIVE_WIDTH = 128;
 constexpr int DISPLAY_NATIVE_HEIGHT = 64;
 constexpr int OLED_RESET = -1;
 constexpr uint8_t OLED_PAGE_COUNT = 4;
 
-constexpr uint8_t LOG_QUEUE_SIZE = 8;
-constexpr size_t LOG_LINE_SIZE = 22;
-constexpr uint32_t LOG_HOLD_MS = 1400;
-
-char logQueue[LOG_QUEUE_SIZE][LOG_LINE_SIZE] = {};
-char activeLog[LOG_LINE_SIZE] = "> STARTING";
-
-uint8_t logHead = 0;
-uint8_t logCount = 0;
-uint32_t lastLogRotateMs = 0;
 
 Adafruit_SSD1306 display(
     DISPLAY_NATIVE_WIDTH,
@@ -60,7 +48,7 @@ constexpr uint32_t OLED_TASK_STACK_SIZE = 8192;
 
 constexpr UBaseType_t OLED_TASK_PRIORITY = 2;
 
-constexpr uint32_t OLED_REFRESH_INTERVAL_MS = 100;
+constexpr uint32_t OLED_REFRESH_INTERVAL_MS = 50;
 
 TaskHandle_t oledTaskHandle = nullptr;
 
@@ -334,70 +322,10 @@ void drawCenteredText(
     display.print(text);
 }
 
-void drawDateHeader(const Status &status)
-{
-    char dateText[24];
 
-    if (status.timeValid) {
-
-        strftime(
-            dateText,
-            sizeof(dateText),
-            "%a %d %b %Y",
-            &status.localTime
-        );
-
-    } else {
-
-        snprintf(
-            dateText,
-            sizeof(dateText),
-            "WAITING FOR NTP"
-        );
-    }
-
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-
-    // Date aligned to the left.
-    display.setCursor(0, 4);
-    display.print(dateText);
-
-    // Charging / external power indication.
-    if (status.externalPowerPresent)
-    {
-        // Your custom 8x12 lightning icon.
-        display.drawBitmap(
-            display.width() - Icon_Power.width - 2,
-            2,
-            Icon_Power.data,
-            Icon_Power.width,
-            Icon_Power.height,
-            SSD1306_WHITE
-        );
-    }
-    else if (status.batteryPercent >= 0)
-    {
-        // Show battery percentage when not charging.
-        char batteryText[6];
-
-        snprintf(
-            batteryText,
-            sizeof(batteryText),
-            "%d%%",
-            status.batteryPercent
-        );
-
-        const int16_t width = textWidth(batteryText, 1);
-
-        display.setCursor(
-            display.width() - width,
-            4
-        );
-
-        display.print(batteryText);
-    }
-}
+// ------------------------------------------------------------
+// CUSTOM BITMAP FONT RENDERING
+// ------------------------------------------------------------
 
 void drawBitmapChar(
     char ch,
@@ -412,20 +340,22 @@ void drawBitmapChar(
     const uint16_t offset =
         (uint16_t)(ch - 32) * font->FontHeight;
 
-    for (uint8_t row = 0; row < font->FontHeight; ++row) {
-
+    for (uint8_t row = 0; row < font->FontHeight; ++row)
+    {
         const uint16_t rowBits = font->data[offset + row];
 
-        for (uint8_t col = 0; col < font->FontWidth && col < 16; ++col) {
-
-            if (rowBits & (uint16_t)(0x8000U >> col)) {
-
+        for (uint8_t col = 0;
+             col < font->FontWidth && col < 16;
+             ++col)
+        {
+            if (rowBits & (uint16_t)(0x8000U >> col))
+            {
                 const int16_t px = x + col;
                 const int16_t py = y + row;
 
                 if (px >= 0 && px < display.width() &&
-                    py >= 0 && py < display.height()) {
-
+                    py >= 0 && py < display.height())
+                {
                     display.drawPixel(
                         px,
                         py,
@@ -437,6 +367,7 @@ void drawBitmapChar(
     }
 }
 
+
 void drawBitmapString(
     const char *text,
     int16_t x,
@@ -446,8 +377,8 @@ void drawBitmapString(
 {
     if (text == nullptr || font == nullptr) return;
 
-    while (*text) {
-
+    while (*text)
+    {
         drawBitmapChar(*text, x, y, font);
 
         x += font->FontWidth;
@@ -455,65 +386,509 @@ void drawBitmapString(
     }
 }
 
+
+// ------------------------------------------------------------
+// DISPLAY ANIMATION NAME
+// ------------------------------------------------------------
+
+const char *getDisplayAnimationName(
+    const Status &status,
+    bool portrait
+)
+{
+    const char *mode =
+        status.modeName[0] != '\0'
+        ? status.modeName
+        : "UNKNOWN";
+
+    if (!portrait)
+    {
+        return mode;
+    }
+
+    // Shorten long animation names for the 64-pixel width.
+
+    if (strcmp(mode, "SAND_CLOCK") == 0)
+        return "SAND CLOCK";
+
+    if (strcmp(mode, "SAND_GRAVITY") == 0)
+        return "GRAVITY";
+
+    return mode;
+}
+
+
+// ============================================================
+// PAGE 0 — ROBOT
+// ============================================================
+
+
+void drawRobotPage()
+{
+    // --------------------------------------------------------
+    // TEMPORARY MOOD TEST SEQUENCE
+    // --------------------------------------------------------
+
+    static constexpr EmotionRenderer::Mood testMoods[] =
+    {
+        EmotionRenderer::Mood::NEUTRAL,
+        EmotionRenderer::Mood::HAPPY,
+        EmotionRenderer::Mood::TIRED,
+        EmotionRenderer::Mood::ANGRY,
+        EmotionRenderer::Mood::SURPRISED
+    };
+
+    constexpr uint32_t MOOD_DURATION_MS = 8000;
+
+    static bool testStarted = false;
+    static uint8_t moodIndex = 0;
+    static uint32_t lastMoodChangeMs = 0;
+
+    const uint32_t now = millis();
+
+    // Initialize the first expression.
+    if (!testStarted)
+    {
+        testStarted = true;
+        moodIndex = 0;
+        lastMoodChangeMs = now;
+
+        EmotionRenderer::setMood(testMoods[moodIndex]);
+
+        Serial.println("[EYES TEST] NEUTRAL");
+    }
+
+    // Change expression every three seconds.
+    else if ((uint32_t)(now - lastMoodChangeMs) >=
+             MOOD_DURATION_MS)
+    {
+        moodIndex++;
+
+        if (moodIndex >=
+            (sizeof(testMoods) / sizeof(testMoods[0])))
+        {
+            moodIndex = 0;
+        }
+
+        EmotionRenderer::setMood(testMoods[moodIndex]);
+
+        lastMoodChangeMs = now;
+
+        Serial.printf(
+            "[EYES TEST] Mood index: %u\n",
+            moodIndex
+        );
+    }
+
+    // Render the animated face.
+    EmotionRenderer::drawRobotEyes(display, now);
+}
+
+
+
+// ============================================================
+// PAGE 1 — NETWORK
+// ============================================================
+
+// ------------------------------------------------------------
+// LANDSCAPE NETWORK PAGE (128 x 64)
+// ------------------------------------------------------------
+
+void drawNetworkRow(
+    const char *label,
+    const char *value,
+    int16_t y
+)
+{
+    display.setCursor(0, y);
+    display.print(label);
+
+    display.setCursor(34, y);
+    display.print(value);
+}
+
+
+void drawNetworkPage(const Status &status)
+{
+    display.setTextSize(1);
+
+    const char *wifi =
+        status.wifiConnected ? "CONNECTED" : "OFFLINE";
+
+    const char *ntp =
+        status.ntpSynced ? "SYNCED" : "WAITING";
+
+    const char *ip =
+        (status.ipAddress[0] != '\0' &&
+         strcmp(status.ipAddress, "-") != 0)
+        ? status.ipAddress
+        : "NO IP";
+
+    const char *ble =
+        status.bleConnected ? "CONNECTED" : "WAITING";
+
+    drawNetworkRow("WIFI", wifi, 0);
+    drawNetworkRow("NTP", ntp, 16);
+
+    // IP needs more horizontal space.
+    display.setCursor(0, 26);
+    display.print("IP");
+
+    display.setCursor(18, 26);
+    display.print(ip);
+
+    drawNetworkRow("BLE", ble, 36);
+}
+
+
+// ------------------------------------------------------------
+// PORTRAIT NETWORK PAGE (64 x 128)
+// ------------------------------------------------------------
+
+void drawPortraitIpAddress(const char *ipAddress)
+{
+    if (ipAddress == nullptr ||
+        ipAddress[0] == '\0' ||
+        strcmp(ipAddress, "-") == 0)
+    {
+        drawCenteredText("NO IP", 68, 1);
+        return;
+    }
+
+    // Split a normal IPv4 address into two readable lines.
+
+    const char *firstDot = strchr(ipAddress, '.');
+
+    const char *secondDot =
+        firstDot != nullptr
+        ? strchr(firstDot + 1, '.')
+        : nullptr;
+
+    if (secondDot == nullptr)
+    {
+        drawCenteredText(ipAddress, 68, 1);
+        return;
+    }
+
+    char firstPart[16] = {};
+    char secondPart[16] = {};
+
+    size_t firstLength =
+        (size_t)(secondDot - ipAddress) + 1;
+
+    if (firstLength >= sizeof(firstPart))
+    {
+        firstLength = sizeof(firstPart) - 1;
+    }
+
+    memcpy(firstPart, ipAddress, firstLength);
+    firstPart[firstLength] = '\0';
+
+    snprintf(
+        secondPart,
+        sizeof(secondPart),
+        "%s",
+        secondDot + 1
+    );
+
+    drawCenteredText(firstPart, 68, 1);
+    drawCenteredText(secondPart, 79, 1);
+}
+
+
+void drawPortraitNetworkPage(const Status &status)
+{
+    display.setTextSize(1);
+
+    // Wi-Fi
+
+    drawCenteredText("WIFI", 2, 1);
+
+    drawCenteredText(
+        status.wifiConnected ? "CONNECTED" : "OFFLINE",
+        12,
+        1
+    );
+
+    // NTP
+
+    drawCenteredText("NTP", 28, 1);
+
+    drawCenteredText(
+        status.ntpSynced ? "SYNCED" : "WAITING",
+        38,
+        1
+    );
+
+    // IP address
+
+    drawCenteredText("IP", 55, 1);
+
+    drawPortraitIpAddress(status.ipAddress);
+
+    // Bluetooth LE
+
+    drawCenteredText("BLE", 99, 1);
+
+    drawCenteredText(
+        status.bleConnected ? "CONNECTED" : "WAITING",
+        109,
+        1
+    );
+}
+
+
+
+// ============================================================
+// PAGE 2 — RAW MPU6050 DATA
+// ============================================================
+
+// ------------------------------------------------------------
+// GET VALID MPU6050 DATA
+// ------------------------------------------------------------
+
+
+bool getImuSnapshot(
+    const Status &status,
+    MPU6050::Data &imu,
+    const char *&statusText
+)
+{
+    if (!status.mpuReady)
+    {
+        statusText = "NOT READY";
+        return false;
+    }
+
+    if (!MPU6050::getData(imu) || !imu.valid)
+    {
+        statusText = "NO DATA";
+        return false;
+    }
+
+    statusText = "READY";
+    return true;
+}
+
+
+
+// ------------------------------------------------------------
+// DRAW ONE RAW AXIS VALUE
+// ------------------------------------------------------------
+
+void drawRawImuValue(
+    const char *axis,
+    int16_t value,
+    int16_t x,
+    int16_t y
+)
+{
+    char line[16];
+
+    snprintf(
+        line,
+        sizeof(line),
+        "%s:%+6d",
+        axis,
+        (int)value
+    );
+
+    display.setCursor(x, y);
+    display.print(line);
+}
+
+
+// ------------------------------------------------------------
+// LANDSCAPE IMU PAGE (128 x 64)
+// ------------------------------------------------------------
+//
+// Left column:  Accelerometer X, Y, Z
+// Right column: Gyroscope X, Y, Z
+//
+// ------------------------------------------------------------
+
+void drawLandscapeImuPage(const Status &status)
+{
+    display.setTextSize(1);
+
+    MPU6050::Data imu{};
+    const char *mpuStatus = nullptr;
+
+    const bool dataReady =
+        getImuSnapshot(status, imu, mpuStatus);
+
+    // MPU status at the top.
+    char statusLine[24];
+
+    snprintf(
+        statusLine,
+        sizeof(statusLine),
+        "MPU6050: %s",
+        mpuStatus
+    );
+
+    drawCenteredText(statusLine, 1, 1);
+
+    if (!dataReady)
+    {
+        return;
+    }
+
+    // ACCELEROMETER — LEFT COLUMN
+    drawRawImuValue("AX", imu.axRaw, 2, 17);
+    drawRawImuValue("AY", imu.ayRaw, 2, 33);
+    drawRawImuValue("AZ", imu.azRaw, 2, 49);
+
+    // GYROSCOPE — RIGHT COLUMN
+    drawRawImuValue("GX", imu.gxRaw, 66, 17);
+    drawRawImuValue("GY", imu.gyRaw, 66, 33);
+    drawRawImuValue("GZ", imu.gzRaw, 66, 49);
+}
+
+
+// ------------------------------------------------------------
+// PORTRAIT IMU PAGE (64 x 128)
+// ------------------------------------------------------------
+//
+// Display all six raw values vertically.
+//
+// ------------------------------------------------------------
+
+void drawPortraitImuPage(const Status &status)
+{
+    display.setTextSize(1);
+
+    MPU6050::Data imu{};
+    const char *mpuStatus = nullptr;
+
+    const bool dataReady =
+        getImuSnapshot(status, imu, mpuStatus);
+
+    // MPU identification and status.
+    drawCenteredText("MPU6050", 1, 1);
+    drawCenteredText(mpuStatus, 11, 1);
+
+    if (!dataReady)
+    {
+        return;
+    }
+
+    // ACCELEROMETER
+    drawRawImuValue("AX", imu.axRaw, 5, 28);
+    drawRawImuValue("AY", imu.ayRaw, 5, 44);
+    drawRawImuValue("AZ", imu.azRaw, 5, 60);
+
+    // GYROSCOPE
+    drawRawImuValue("GX", imu.gxRaw, 5, 76);
+    drawRawImuValue("GY", imu.gyRaw, 5, 92);
+    drawRawImuValue("GZ", imu.gzRaw, 5, 108);
+}
+
+
+
+// ============================================================
+// PAGE 3 — CLOCK
+// ============================================================
+
+// ------------------------------------------------------------
+// LANDSCAPE CLOCK PAGE (128 x 64)
+// ------------------------------------------------------------
+
 void drawClockPage(const Status &status)
 {
-    char hourMinute[8];
-    char seconds[4];
+    char dateText[24];
+    char clockText[6];
+    char secondsText[3];
 
-    if (status.timeValid) {
+    // Date at the top.
+
+    if (status.timeValid)
+    {
+        strftime(
+            dateText,
+            sizeof(dateText),
+            "%a %d %b %Y",
+            &status.localTime
+        );
+
         snprintf(
-            hourMinute,
-            sizeof(hourMinute),
+            clockText,
+            sizeof(clockText),
             "%02d:%02d",
             status.localTime.tm_hour,
             status.localTime.tm_min
         );
 
         snprintf(
-            seconds,
-            sizeof(seconds),
+            secondsText,
+            sizeof(secondsText),
             "%02d",
             status.localTime.tm_sec
         );
-    } else {
-        snprintf(hourMinute, sizeof(hourMinute), "--:--");
-        snprintf(seconds, sizeof(seconds), "--");
+    }
+    else
+    {
+        snprintf(dateText, sizeof(dateText), "WAITING FOR NTP");
+        snprintf(clockText, sizeof(clockText), "--:--");
+        snprintf(secondsText, sizeof(secondsText), "--");
     }
 
-    // Main clock: custom 16x26 font.
+    drawCenteredText(dateText, 2, 1);
+
+    // Large HH:MM clock.
+
+    const int16_t clockWidth =
+        5 * Font_16x26.FontWidth;
+
+    const int16_t clockX =
+        (display.width() - clockWidth) / 2;
+
     drawBitmapString(
-        hourMinute,
-        17,
+        clockText,
+        clockX,
         18,
         &Font_16x26
     );
 
-    // Seconds: small 7x10 font.
+    // Seconds on the right side.
+
+    const int16_t secondsX =
+        display.width() -
+        (2 * Font_7x10.FontWidth) - 4;
+
     drawBitmapString(
-        seconds,
-        101,
-        30,
+        secondsText,
+        secondsX,
+        28,
         &Font_7x10
+    );
+
+    // Current MAX7219 animation at the bottom.
+
+    drawCenteredText(
+        getDisplayAnimationName(status, false),
+        55,
+        1
     );
 }
 
-// --------------------------------------------------
+
+// ------------------------------------------------------------
 // PORTRAIT CLOCK PAGE (64 x 128)
-// Used for physical positions 1 and 2.
-// --------------------------------------------------
+// ------------------------------------------------------------
 
 void drawPortraitClockPage(const Status &status)
 {
     char dateText[20];
+    char yearText[12];
+
     char hourText[3];
     char minuteText[3];
-    char batteryText[12];
+    char secondsText[3];
 
-    const int16_t screenW = display.width();
-
-    // --------------------------------------------------
+    // --------------------------------------------------------
     // DATE
-    // --------------------------------------------------
+    // --------------------------------------------------------
 
     if (status.timeValid)
     {
@@ -523,53 +898,14 @@ void drawPortraitClockPage(const Status &status)
             "%a %d %b",
             &status.localTime
         );
-    }
-    else
-    {
-        snprintf(dateText, sizeof(dateText), "WAITING NTP");
-    }
 
-    drawCenteredText(dateText, 2, 1);
-
-
-    // --------------------------------------------------
-    // BATTERY / CHARGING STATUS
-    // --------------------------------------------------
-
-    if (status.externalPowerPresent)
-    {
-        display.drawBitmap(
-            3,
-            17,
-            Icon_Power.data,
-            Icon_Power.width,
-            Icon_Power.height,
-            SSD1306_WHITE
-        );
-
-        display.setCursor(14, 19);
-        display.print("CHARGING");
-    }
-    else if (status.batteryPercent >= 0)
-    {
         snprintf(
-            batteryText,
-            sizeof(batteryText),
-            "BAT: %d%%",
-            status.batteryPercent
+            yearText,
+            sizeof(yearText),
+            "%04d",
+            status.localTime.tm_year + 1900
         );
 
-        drawCenteredText(batteryText, 20, 1);
-    }
-
-
-    // --------------------------------------------------
-    // TIME
-    // Large vertical HH / MM clock
-    // --------------------------------------------------
-
-    if (status.timeValid)
-    {
         snprintf(
             hourText,
             sizeof(hourText),
@@ -583,482 +919,81 @@ void drawPortraitClockPage(const Status &status)
             "%02d",
             status.localTime.tm_min
         );
+
+        snprintf(
+            secondsText,
+            sizeof(secondsText),
+            "%02d",
+            status.localTime.tm_sec
+        );
     }
     else
     {
+        snprintf(dateText, sizeof(dateText), "NTP WAIT");
+        snprintf(yearText, sizeof(yearText), "----");
+
         snprintf(hourText, sizeof(hourText), "--");
         snprintf(minuteText, sizeof(minuteText), "--");
+        snprintf(secondsText, sizeof(secondsText), "--");
     }
 
-    // Font_16x26: two digits, centered horizontally.
-    const int16_t clockWidth =
+    // Date and year.
+    drawCenteredText(dateText, 2, 1);
+    drawCenteredText(yearText, 12, 1);
+
+
+    // --------------------------------------------------------
+    // HOURS — LARGE FONT
+    // --------------------------------------------------------
+
+    const int16_t digitWidth =
         2 * Font_16x26.FontWidth;
 
     const int16_t clockX =
-        (screenW - clockWidth) / 2;
+        (display.width() - digitWidth) / 2;
 
-    // HOURS
     drawBitmapString(
         hourText,
         clockX,
-        39,
+        30,
         &Font_16x26
     );
 
-    // MINUTES
+
+    // --------------------------------------------------------
+    // MINUTES — LARGE FONT
+    // --------------------------------------------------------
+
     drawBitmapString(
         minuteText,
         clockX,
-        68,
+        57,
         &Font_16x26
     );
 
 
-    // --------------------------------------------------
-    // NETWORK STATUS (CENTERED)
-    // --------------------------------------------------
-
-    display.setTextSize(1);
-
-    char wifiText[16];
-    char ntpText[16];
-
-    snprintf(
-        wifiText,
-        sizeof(wifiText),
-        "WiFi: %s",
-        status.wifiConnected ? "ON" : "OFF"
-    );
-
-    snprintf(
-        ntpText,
-        sizeof(ntpText),
-        "NTP: %s",
-        status.ntpSynced ? "SYNC" : "WAIT"
-    );
-
-    drawCenteredText(wifiText, 101, 1);
-    drawCenteredText(ntpText, 111, 1);
-
-
-    // --------------------------------------------------
-    // MODE FOOTER
-    // --------------------------------------------------
-
-    drawCenteredText(
-        status.modeName[0] != '\0'
-        ? status.modeName
-        : "UNKNOWN",
-        120,
-        1
-    );
-}
-
-// ------------------------------------------------------------
-// PORTRAIT ROBOT FACE PAGE (64 x 128)
-// ------------------------------------------------------------
-
-void drawPortraitRobotFacePage(const Status &status)
-{
-    char dateText[20];
-    char clockText[6];
-
     // --------------------------------------------------------
-    // DATE
-    // --------------------------------------------------------
-
-    if (status.timeValid)
-    {
-        strftime(
-            dateText,
-            sizeof(dateText),
-            "%a %d %b",
-            &status.localTime
-        );
-    }
-    else
-    {
-        snprintf(
-            dateText,
-            sizeof(dateText),
-            "WAITING NTP"
-        );
-    }
-
-    drawCenteredText(dateText, 2, 1);
-
-    // --------------------------------------------------------
-    // ROBOT EYES
-    // --------------------------------------------------------
-
-    EmotionRenderer::drawNeutralEyes(display);
-
-    // --------------------------------------------------------
-    // NETWORK STATUS
+    // SECONDS — NORMAL FONT
     // --------------------------------------------------------
 
     drawCenteredText(
-        status.wifiConnected ? "WIFI ON" : "WIFI OFF",
-        104,
+        secondsText,
+        86,
         1
     );
 
+
     // --------------------------------------------------------
-    // TIME
+    // CURRENT ANIMATION
     // --------------------------------------------------------
-
-    if (status.timeValid)
-    {
-        snprintf(
-            clockText,
-            sizeof(clockText),
-            "%02d:%02d",
-            status.localTime.tm_hour,
-            status.localTime.tm_min
-        );
-    }
-    else
-    {
-        snprintf(clockText, sizeof(clockText), "--:--");
-    }
-
-    drawCenteredText(clockText, 118, 1);
-}
-
-void drawNetworkPage(const Status &status)
-{
-    display.setTextSize(1);
-
-    display.setCursor(0, 19);
-    display.print("WiFi: ");
-    display.println(
-        status.wifiConnected ? "CONNECTED" : "OFFLINE"
-    );
-
-    display.setCursor(0, 29);
-    display.print("NTP: ");
-    display.println(
-        status.ntpSynced ? "SYNCHRONIZED" : "WAITING"
-    );
-
-    display.setCursor(0, 39);
-    display.print("IP: ");
-    display.println(
-        status.ipAddress[0] != '\0'
-            ? status.ipAddress
-            : "-"
-    );
-
-    display.setCursor(0, 49);
-    display.print("Mode: ");
-    display.println(
-        status.modeName[0] != '\0'
-        ? status.modeName
-        : "UNKNOWN"
-    );
-}
-
-// --------------------------------------------------
-// PORTRAIT NETWORK PAGE (64 x 128)
-// --------------------------------------------------
-
-void drawPortraitNetworkPage(const Status &status)
-{
-    display.setTextSize(1);
-
-    drawCenteredText("NETWORK", 3, 1);
-
-    display.setCursor(3, 24);
-    display.print("WiFi: ");
-    display.println(status.wifiConnected ? "ON" : "OFF");
-
-    display.setCursor(3, 38);
-    display.print("NTP: ");
-    display.println(status.ntpSynced ? "SYNC" : "WAIT");
-
-    display.setCursor(3, 55);
-    display.println("IP ADDRESS:");
-
-    // An IPv4 address can be wider than the 64-pixel display.
-    // Split it into two lines instead of clipping the address.
-    if (status.ipAddress[0] != '\0')
-    {
-        char ipFirst[11] = {};
-        char ipSecond[11] = {};
-
-        const size_t ipLength = strlen(status.ipAddress);
-
-        const size_t firstLength =
-            (ipLength > 10) ? 10 : ipLength;
-
-        strncpy(ipFirst, status.ipAddress, firstLength);
-
-        if (ipLength > firstLength)
-        {
-            strncpy(
-                ipSecond,
-                status.ipAddress + firstLength,
-                sizeof(ipSecond) - 1
-            );
-        }
-
-        display.setCursor(3, 68);
-        display.print(ipFirst);
-
-        display.setCursor(3, 80);
-        display.print(ipSecond);
-    }
-    else
-    {
-        display.setCursor(3, 68);
-        display.print("-");
-    }
-
-    display.setCursor(3, 103);
-    display.print("Mode:");
 
     drawCenteredText(
-        status.modeName[0] != '\0'
-        ? status.modeName
-        : "UNKNOWN",
+        getDisplayAnimationName(status, true),
         116,
         1
     );
 }
 
-void drawImuPage(const Status &status)
-{
-    char line[32];
-
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-
-    // --------------------------------------------------
-    // MPU6050 STATUS
-    // --------------------------------------------------
-
-    display.setCursor(0, 17);
-
-    if (!status.mpuReady) {
-        display.println("MPU6050: NOT READY");
-        return;
-    }
-
-    MPU6050::Data imu;
-
-    if (!MPU6050::getData(imu)) {
-        drawCenteredText("NO SENSOR DATA", 40, 1);
-        return;
-    }
-
-    if (!imu.valid) {
-        display.println("MPU6050: NO DATA");
-        return;
-    }
-
-    display.println("MPU6050: RAW STREAM");
-
-    // --------------------------------------------------
-    // RAW ACCELEROMETER DATA
-    // --------------------------------------------------
-
-    // Raw accelerometer X and Y.
-    snprintf(
-        line,
-        sizeof(line),
-        "AX:%+6d AY:%+6d",
-        (int)imu.axRaw,
-        (int)imu.ayRaw
-    );
-
-    display.setCursor(0, 25);
-    display.println(line);
-
-    // Raw accelerometer Z and temperature.
-    snprintf(
-        line,
-        sizeof(line),
-        "AZ:%+6d T:%4.1fC",
-        (int)imu.azRaw,
-        (double)imu.temperatureC
-    );
-
-    display.setCursor(0, 33);
-    display.println(line);
-
-    // --------------------------------------------------
-    // RAW GYROSCOPE DATA
-    // --------------------------------------------------
-
-    // Raw gyroscope X and Y.
-    snprintf(
-        line,
-        sizeof(line),
-        "GX:%+6d GY:%+6d",
-        (int)imu.gxRaw,
-        (int)imu.gyRaw
-    );
-
-    display.setCursor(0, 41);
-    display.println(line);
-
-    // Raw gyroscope Z.
-    snprintf(
-        line,
-        sizeof(line),
-        "GZ:%+6d",
-        (int)imu.gzRaw
-    );
-
-    display.setCursor(0, 49);
-    display.println(line);
-}
-
-// --------------------------------------------------
-// PORTRAIT IMU PAGE (64 x 128)
-// --------------------------------------------------
-
-void drawPortraitImuPage(const Status &status)
-{
-    char line[24];
-
-    display.setTextSize(1);
-
-    drawCenteredText("IMU RAW DATA", 2, 1);
-
-    if (!status.mpuReady)
-    {
-        drawCenteredText("MPU NOT READY", 40, 1);
-        return;
-    }
-
-    MPU6050::Data imu;
-
-    if (!MPU6050::getData(imu)) {
-        drawCenteredText("NO SENSOR DATA", 40, 1);
-        return;
-    }
-
-    if (!imu.valid)
-    {
-        drawCenteredText("NO SENSOR DATA", 40, 1);
-        return;
-    }
-
-    // Raw accelerometer X.
-    snprintf(line, sizeof(line), "AX:%+6d", (int)imu.axRaw);
-    display.setCursor(3, 19);
-    display.println(line);
-
-    // Raw accelerometer Y.
-    snprintf(line, sizeof(line), "AY:%+6d", (int)imu.ayRaw);
-    display.setCursor(3, 30);
-    display.println(line);
-
-    // Raw accelerometer Z.
-    snprintf(line, sizeof(line), "AZ:%+6d", (int)imu.azRaw);
-    display.setCursor(3, 41);
-    display.println(line);
-
-    // Raw gyroscope X.
-    snprintf(line, sizeof(line), "GX:%+6d", (int)imu.gxRaw);
-    display.setCursor(3, 52);
-    display.println(line);
-
-    // Raw gyroscope Y.
-    snprintf(line, sizeof(line), "GY:%+6d", (int)imu.gyRaw);
-    display.setCursor(3, 63);
-    display.println(line);
-
-    // Raw gyroscope Z.
-    snprintf(line, sizeof(line), "GZ:%+6d", (int)imu.gzRaw);
-    display.setCursor(3, 74);
-    display.println(line);
-
-    // Complementary-filter angles.
-    snprintf(
-        line,
-        sizeof(line),
-        "P:%+.1f",
-        (double)imu.pitchDeg
-    );
-    display.setCursor(3, 88);
-    display.println(line);
-
-    snprintf(
-        line,
-        sizeof(line),
-        "R:%+.1f",
-        (double)imu.rollDeg
-    );
-    display.setCursor(3, 99);
-    display.println(line);
-
-    // Temperature.
-    snprintf(
-        line,
-        sizeof(line),
-        "T:%4.1fC",
-        (double)imu.temperatureC
-    );
-    display.setCursor(3, 110);
-    display.println(line);
-}
-
-
-void drawModeFooter(const Status &status)
-{
-    char footer[24];
-
-    snprintf(
-        footer,
-        sizeof(footer),
-        "%s",
-        status.modeName[0] != '\0' ? status.modeName : "UNKNOWN"
-    );
-
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-
-    int16_t x = (display.width() - textWidth(footer, 1)) / 2;
-    if (x < 0) x = 0;
-
-    display.setCursor(x, 47);
-    display.print(footer);
-}
-
-void drawLogLine()
-{
-    const uint32_t now = millis();
-
-    if (logMutex != nullptr &&
-        xSemaphoreTake(logMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-
-        if (logCount > 0 &&
-            (uint32_t)(now - lastLogRotateMs) >= LOG_HOLD_MS) {
-
-            strncpy(
-                activeLog,
-                logQueue[logHead],
-                sizeof(activeLog) - 1
-            );
-
-            activeLog[sizeof(activeLog) - 1] = '\0';
-
-            logHead = (logHead + 1) % LOG_QUEUE_SIZE;
-            --logCount;
-
-            lastLogRotateMs = now;
-        }
-
-        xSemaphoreGive(logMutex);
-    }
-
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 56);
-    display.print(activeLog);
-}
 
 } // namespace
 
@@ -1070,8 +1005,8 @@ bool startTask()
 {
     if (!displayReady ||
         oledTaskHandle != nullptr ||
-        statusMutex == nullptr ||
-        logMutex == nullptr) {
+        statusMutex == nullptr)
+    {
         return false;
     }
 
@@ -1205,6 +1140,42 @@ void setApplicationStatus(
     notifyDisplayUpdate();
 }
 
+void setBluetoothStatus(bool connected)
+{
+    if (statusMutex == nullptr ||
+        xSemaphoreTake(statusMutex, pdMS_TO_TICKS(20)) != pdTRUE)
+    {
+        return;
+    }
+
+    currentStatus.bleConnected = connected;
+
+    xSemaphoreGive(statusMutex);
+
+    notifyDisplayUpdate();
+}
+
+
+void setAnimationMode(const char *modeName)
+{
+    if (statusMutex == nullptr ||
+        xSemaphoreTake(statusMutex, pdMS_TO_TICKS(20)) != pdTRUE)
+    {
+        return;
+    }
+
+    snprintf(
+        currentStatus.modeName,
+        sizeof(currentStatus.modeName),
+        "%s",
+        modeName != nullptr ? modeName : "UNKNOWN"
+    );
+
+    xSemaphoreGive(statusMutex);
+
+    notifyDisplayUpdate();
+}
+
 // ------------------------------------------------------------
 // OLED PAGE NAVIGATION
 // ------------------------------------------------------------
@@ -1255,16 +1226,14 @@ bool begin()
         return false;
     }
 
-    // Create synchronization objects.
-    if (statusMutex == nullptr) {
+    // Create the status synchronization object.
+    if (statusMutex == nullptr)
+    {
         statusMutex = xSemaphoreCreateMutex();
     }
 
-    if (logMutex == nullptr) {
-        logMutex = xSemaphoreCreateMutex();
-    }
-
-    if (statusMutex == nullptr || logMutex == nullptr) {
+    if (statusMutex == nullptr)
+    {
         return false;
     }
 
@@ -1353,190 +1322,132 @@ void showStartupMessage(const char *message)
 
 void logMessage(const char *format, ...)
 {
-    if (format == nullptr || logMutex == nullptr) {
+    if (format == nullptr)
+    {
         return;
     }
 
     char message[96];
 
     va_list args;
+
     va_start(args, format);
     vsnprintf(message, sizeof(message), format, args);
     va_end(args);
 
-    char shortMessage[LOG_LINE_SIZE];
-
-    snprintf(
-        shortMessage,
-        sizeof(shortMessage),
-        "> %.19s",
-        message
-    );
-
-    if (xSemaphoreTake(
-            logMutex,
-            pdMS_TO_TICKS(20)) != pdTRUE) {
-        return;
-    }
-
-    if (logCount >= LOG_QUEUE_SIZE) {
-        logHead = (logHead + 1) % LOG_QUEUE_SIZE;
-        --logCount;
-    }
-
-    const uint8_t tail =
-        (logHead + logCount) % LOG_QUEUE_SIZE;
-
-    strncpy(
-        logQueue[tail],
-        shortMessage,
-        LOG_LINE_SIZE - 1
-    );
-
-    logQueue[tail][LOG_LINE_SIZE - 1] = '\0';
-
-    ++logCount;
-
-    xSemaphoreGive(logMutex);
-
-    requestUpdate();
+    // Diagnostic messages go to Serial, never the OLED.
+    Serial.println(message);
 }
 
+
 namespace {
+
 void update(const Status &status)
 {
-    if (!displayReady) {
+    if (!displayReady)
+    {
         return;
     }
 
-    // Detect the physical device position and update OLED rotation.
+    // Update physical orientation before rendering.
     updateAutomaticRotation();
 
+    // Start with a clean framebuffer.
     display.clearDisplay();
+
     display.setTextColor(SSD1306_WHITE);
     display.setTextWrap(false);
+    display.setTextSize(1);
 
-    // --------------------------------------------------
-    // PORTRAIT MODE: 64 x 128
-    // --------------------------------------------------
+    const bool portrait =
+        display.height() > display.width();
 
-    if (display.height() > display.width())
+    // --------------------------------------------------------
+    // SELECT ONE COMPLETE PAGE
+    // --------------------------------------------------------
+
+    switch (status.page)
     {
-        switch (status.page)
+        // ----------------------------------------------------
+        // PAGE 0 — ROBOT
+        // ----------------------------------------------------
+
+        case 0:
         {
-            case 0:
-                drawPortraitRobotFacePage(status);
-                break;
-
-            case 1:
-                drawPortraitNetworkPage(status);
-                break;
-
-            case 2:
-                drawPortraitImuPage(status);
-                break;
-
-            case 3:
-                drawPortraitClockPage(status);
-                break;
-
-            default:
-                drawPortraitRobotFacePage(status);
-                break;
+            drawRobotPage();
+            break;
         }
-    }
 
-    // --------------------------------------------------
-    // LANDSCAPE MODE: 128 x 64
-    // --------------------------------------------------
+        // ----------------------------------------------------
+        // PAGE 1 — NETWORK
+        // ----------------------------------------------------
 
-    else
-    {
-        // Date header remains in the yellow section.
-        drawDateHeader(status);
-
-        switch (status.page)
+        case 1:
         {
-            // --------------------------------------------------------
-            // HOME PAGE — ROBOT FACE
-            // --------------------------------------------------------
-
-            case 0:
+            if (portrait)
             {
-                EmotionRenderer::drawNeutralEyes(display);
-
-                char clockText[6];
-
-                if (status.timeValid)
-                {
-                    snprintf(
-                        clockText,
-                        sizeof(clockText),
-                        "%02d:%02d",
-                        status.localTime.tm_hour,
-                        status.localTime.tm_min
-                    );
-                }
-                else
-                {
-                    snprintf(
-                        clockText,
-                        sizeof(clockText),
-                        "--:--"
-                    );
-                }
-
-                drawCenteredText(
-                    clockText,
-                    55,
-                    1
-                );
-
-                break;
+                drawPortraitNetworkPage(status);
+            }
+            else
+            {
+                drawNetworkPage(status);
             }
 
-            // --------------------------------------------------------
-            // NETWORK PAGE
-            // --------------------------------------------------------
-
-            case 1:
-                drawNetworkPage(status);
-                break;
-
-            // --------------------------------------------------------
-            // IMU PAGE
-            // --------------------------------------------------------
-
-            case 2:
-                drawImuPage(status);
-                break;
-
-            // --------------------------------------------------------
-            // FULL CLOCK PAGE
-            // --------------------------------------------------------
-
-            case 3:
-                drawClockPage(status);
-                break;
-
-            default:
-                EmotionRenderer::drawNeutralEyes(display);
-                break;
+            break;
         }
 
-        // Keep the mode footer and log strip on the information pages.
-        if (status.page != 0)
+        // ----------------------------------------------------
+        // PAGE 2 — IMU
+        // ----------------------------------------------------
+        case 2:
         {
-            drawModeFooter(status);
-            drawLogLine();
+            if (portrait)
+            {
+                drawPortraitImuPage(status);
+            }
+            else
+            {
+                drawLandscapeImuPage(status);
+            }
+
+            break;
         }
 
-        drawModeFooter(status);
-        drawLogLine();
+        // ----------------------------------------------------
+        // PAGE 3 — CLOCK
+        // ----------------------------------------------------
+
+        case 3:
+        {
+            if (portrait)
+            {
+                drawPortraitClockPage(status);
+            }
+            else
+            {
+                drawClockPage(status);
+            }
+
+            break;
+        }
+
+        // Unknown page returns to the robot face.
+
+        default:
+        {
+            drawRobotPage();
+            break;
+        }
     }
+
+    // No shared header.
+    // No shared footer.
+    // No log line.
 
     flushDisplay();
 }
+
 } // namespace update
+
 
 } // namespace DisplayManager
