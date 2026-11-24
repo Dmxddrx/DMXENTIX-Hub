@@ -732,6 +732,19 @@ void drawLandscapeEyes(
         blend
     );
 
+    // Smooth independent eye opening and closing.
+    state.leftEye.openness = interpolate(
+        state.leftEye.openness,
+        state.leftEye.targetOpenness,
+        blend
+    );
+
+    state.rightEye.openness = interpolate(
+        state.rightEye.openness,
+        state.rightEye.targetOpenness,
+        blend
+    );
+
     // --------------------------------------------------------
     // UPDATE AUTOMATIC BEHAVIOUR
     // --------------------------------------------------------
