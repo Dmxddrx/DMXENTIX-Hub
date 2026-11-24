@@ -121,6 +121,13 @@ struct EyeAnimationState
     float eyeWidth = DEFAULT_EYE_WIDTH;
     float eyeHeight = DEFAULT_EYE_HEIGHT;
 
+    // Independent geometry scaling.
+    float geometryScaleX = 1.0f;
+    float targetGeometryScaleX = 1.0f;
+
+    float geometryScaleY = 1.0f;
+    float targetGeometryScaleY = 1.0f;
+
     float topLid = 0.0f;
     float bottomLid = 0.0f;
 };
@@ -138,6 +145,17 @@ struct AnimationState
 
     float targetGazeX = 0.0f;
     float targetGazeY = 0.0f;
+
+    // Smooth eye spacing.
+    float eyeGap = DEFAULT_EYE_GAP;
+    float targetEyeGap = DEFAULT_EYE_GAP;
+
+    // Corner radius multiplier.
+    float cornerRadiusScale = 1.0f;
+    float targetCornerRadiusScale = 1.0f;
+
+    // Display a single centred eye.
+    bool cyclopsMode = false;
 
     // Independent eyes.
     EyeAnimationState leftEye{};
@@ -180,6 +198,27 @@ bool idleGazeEnabled = true;
 
 // Automatic blinking is enabled by default.
 bool automaticBlinkEnabled = true;
+
+// ------------------------------------------------------------
+// REQUESTED EYE GEOMETRY
+// ------------------------------------------------------------
+
+// Independent left-eye dimensions.
+float requestedLeftScaleX = 1.0f;
+float requestedLeftScaleY = 1.0f;
+
+// Independent right-eye dimensions.
+float requestedRightScaleX = 1.0f;
+float requestedRightScaleY = 1.0f;
+
+// Shared eye spacing.
+float requestedEyeGap = DEFAULT_EYE_GAP;
+
+// Shared corner radius multiplier.
+float requestedCornerRadiusScale = 1.0f;
+
+// Single-eye layout.
+bool requestedCyclopsMode = false;
 
 // ------------------------------------------------------------
 // GAZE DIRECTION COORDINATES
@@ -295,6 +334,30 @@ void initializeAnimation(uint32_t nowMs)
 
     state.targetGazeX = initialGaze.x;
     state.targetGazeY = initialGaze.y;
+
+    // --------------------------------------------------------
+    // RESTORE REQUESTED GEOMETRY
+    // --------------------------------------------------------
+
+    state.leftEye.geometryScaleX = requestedLeftScaleX;
+    state.leftEye.targetGeometryScaleX = requestedLeftScaleX;
+
+    state.leftEye.geometryScaleY = requestedLeftScaleY;
+    state.leftEye.targetGeometryScaleY = requestedLeftScaleY;
+
+    state.rightEye.geometryScaleX = requestedRightScaleX;
+    state.rightEye.targetGeometryScaleX = requestedRightScaleX;
+
+    state.rightEye.geometryScaleY = requestedRightScaleY;
+    state.rightEye.targetGeometryScaleY = requestedRightScaleY;
+
+    state.eyeGap = requestedEyeGap;
+    state.targetEyeGap = requestedEyeGap;
+
+    state.cornerRadiusScale = requestedCornerRadiusScale;
+    state.targetCornerRadiusScale = requestedCornerRadiusScale;
+
+    state.cyclopsMode = requestedCyclopsMode;
 
     // Restore independent opening states.
     state.leftEye.openness = requestedLeftOpenness;
@@ -605,6 +668,7 @@ void drawSingleEye(
     EyeAnimationState &eye,
     int16_t eyeX,
     int16_t centerY,
+    float cornerRadiusScale,
     const MoodShape &mood,
     bool rightEye,
     uint32_t nowMs
@@ -648,11 +712,30 @@ void drawSingleEye(
     const int16_t eyeY =
         centerY - visibleHeight / 2;
 
-    const int16_t cornerRadius =
+    // Calculate the requested corner radius.
+    const float requestedRadius =
+        (static_cast<float>(eyeWidth) / 3.0f) *
+        cornerRadiusScale;
+
+    int16_t cornerRadius =
+        static_cast<int16_t>(requestedRadius + 0.5f);
+
+    // Prevent the radius from exceeding the eye dimensions.
+    const int16_t maxCornerRadius =
         min(
-            eyeWidth / 3,
+            eyeWidth / 2,
             visibleHeight / 2
         );
+
+    if (cornerRadius > maxCornerRadius)
+    {
+        cornerRadius = maxCornerRadius;
+    }
+
+    if (cornerRadius < 0)
+    {
+        cornerRadius = 0;
+    }
 
     // --------------------------------------------------------
     // DRAW ROUNDED-SQUARE EYE
@@ -718,14 +801,63 @@ void drawLandscapeEyes(
         );
 
     // --------------------------------------------------------
+// UPDATE INDEPENDENT EYE GEOMETRY
+// --------------------------------------------------------
+
+state.leftEye.geometryScaleX = interpolate(
+    state.leftEye.geometryScaleX,
+    state.leftEye.targetGeometryScaleX,
+    blend
+);
+
+state.leftEye.geometryScaleY = interpolate(
+    state.leftEye.geometryScaleY,
+    state.leftEye.targetGeometryScaleY,
+    blend
+);
+
+state.rightEye.geometryScaleX = interpolate(
+    state.rightEye.geometryScaleX,
+    state.rightEye.targetGeometryScaleX,
+    blend
+);
+
+state.rightEye.geometryScaleY = interpolate(
+    state.rightEye.geometryScaleY,
+    state.rightEye.targetGeometryScaleY,
+    blend
+);
+
+// Smooth shared geometry.
+state.eyeGap = interpolate(
+    state.eyeGap,
+    state.targetEyeGap,
+    blend
+);
+
+state.cornerRadiusScale = interpolate(
+    state.cornerRadiusScale,
+    state.targetCornerRadiusScale,
+    blend
+);
+
+
+    // --------------------------------------------------------
     // UPDATE INDEPENDENT EYE EXPRESSIONS
     // --------------------------------------------------------
 
-    const MoodShape leftMood =
+    MoodShape leftMood =
         getMoodShape(requestedLeftMood);
 
-    const MoodShape rightMood =
+    MoodShape rightMood =
         getMoodShape(requestedRightMood);
+
+    // Apply geometry scaling without changing mood definitions.
+    leftMood.width *= state.leftEye.geometryScaleX;
+    leftMood.height *= state.leftEye.geometryScaleY;
+
+    rightMood.width *= state.rightEye.geometryScaleX;
+    rightMood.height *= state.rightEye.geometryScaleY;
 
     updateEyeShape(
         state.leftEye,
@@ -790,7 +922,7 @@ void drawLandscapeEyes(
 
     const int16_t eyeGap =
         static_cast<int16_t>(
-            DEFAULT_EYE_GAP
+            state.eyeGap + 0.5f
         );
 
     const int16_t totalWidth =
@@ -828,6 +960,30 @@ void drawLandscapeEyes(
         centerY + eyeOffsetY;
 
     // --------------------------------------------------------
+    // CYCLOPS MODE
+    // --------------------------------------------------------
+
+    if (state.cyclopsMode)
+    {
+        // Position the remaining eye in the centre of the display.
+        const int16_t cyclopsX =
+            (canvas.width() - leftWidth) / 2;
+
+        drawSingleEye(
+            canvas,
+            state.leftEye,
+            cyclopsX + eyeOffsetX,
+            eyeCenterY,
+            state.cornerRadiusScale,
+            leftMood,
+            false,
+            nowMs
+        );
+
+        return;
+    }
+
+    // --------------------------------------------------------
     // DRAW LEFT EYE
     // --------------------------------------------------------
 
@@ -836,6 +992,7 @@ void drawLandscapeEyes(
         state.leftEye,
         leftX + eyeOffsetX,
         eyeCenterY,
+        state.cornerRadiusScale,
         leftMood,
         false,
         nowMs
@@ -850,6 +1007,7 @@ void drawLandscapeEyes(
         state.rightEye,
         rightX + eyeOffsetX,
         eyeCenterY,
+        state.cornerRadiusScale,
         rightMood,
         true,
         nowMs
@@ -1109,6 +1267,158 @@ void setEyeMood(Eye eye, Mood mood)
 }
 
 // ------------------------------------------------------------
+// EYE GEOMETRY PRESETS
+// ------------------------------------------------------------
+
+void setGeometryPreset(GeometryPreset preset)
+{
+    // Begin with the original geometry.
+    float leftScaleX = 1.0f;
+    float leftScaleY = 1.0f;
+
+    float rightScaleX = 1.0f;
+    float rightScaleY = 1.0f;
+
+    float eyeGap = DEFAULT_EYE_GAP;
+
+    float cornerRadiusScale = 1.0f;
+
+    bool cyclopsMode = false;
+
+    switch (preset)
+    {
+        // ----------------------------------------------------
+        // DEFAULT GEOMETRY
+        // ----------------------------------------------------
+
+        case GeometryPreset::NORMAL:
+        case GeometryPreset::RESTORE_EYE_PAIR:
+            break;
+
+        // ----------------------------------------------------
+        // EYE WIDTH
+        // ----------------------------------------------------
+
+        case GeometryPreset::WIDE:
+            leftScaleX = 1.20f;
+            rightScaleX = 1.20f;
+            break;
+
+        case GeometryPreset::NARROW:
+            leftScaleX = 0.80f;
+            rightScaleX = 0.80f;
+            break;
+
+        // ----------------------------------------------------
+        // EYE HEIGHT
+        // ----------------------------------------------------
+
+        case GeometryPreset::TALL:
+            leftScaleY = 1.20f;
+            rightScaleY = 1.20f;
+            break;
+
+        case GeometryPreset::SHORT:
+            leftScaleY = 0.80f;
+            rightScaleY = 0.80f;
+            break;
+
+        // ----------------------------------------------------
+        // EYE SPACING
+        // ----------------------------------------------------
+
+        case GeometryPreset::CLOSE_SPACING:
+            eyeGap = 8.0f;
+            break;
+
+        case GeometryPreset::WIDE_SPACING:
+            eyeGap = 30.0f;
+            break;
+
+        // ----------------------------------------------------
+        // CORNER RADIUS
+        // ----------------------------------------------------
+
+        case GeometryPreset::SMALL_RADIUS:
+            cornerRadiusScale = 0.40f;
+            break;
+
+        case GeometryPreset::LARGE_RADIUS:
+            cornerRadiusScale = 1.50f;
+            break;
+
+        // ----------------------------------------------------
+        // INDEPENDENT EYE GEOMETRY
+        // ----------------------------------------------------
+
+        case GeometryPreset::INDEPENDENT:
+
+            // Left eye: wider and shorter.
+            leftScaleX = 1.20f;
+            leftScaleY = 0.85f;
+
+            // Right eye: narrower and taller.
+            rightScaleX = 0.85f;
+            rightScaleY = 1.20f;
+
+            break;
+
+        // ----------------------------------------------------
+        // CYCLOPS
+        // ----------------------------------------------------
+
+        case GeometryPreset::CYCLOPS:
+
+            // A larger single eye.
+            leftScaleX = 1.25f;
+            leftScaleY = 1.12f;
+
+            eyeGap = 0.0f;
+
+            cyclopsMode = true;
+
+            break;
+    }
+
+    // --------------------------------------------------------
+    // STORE REQUESTED GEOMETRY
+    // --------------------------------------------------------
+
+    requestedLeftScaleX = leftScaleX;
+    requestedLeftScaleY = leftScaleY;
+
+    requestedRightScaleX = rightScaleX;
+    requestedRightScaleY = rightScaleY;
+
+    requestedEyeGap = eyeGap;
+
+    requestedCornerRadiusScale = cornerRadiusScale;
+
+    requestedCyclopsMode = cyclopsMode;
+
+    // --------------------------------------------------------
+    // UPDATE ANIMATION TARGETS
+    // --------------------------------------------------------
+
+    if (state.initialized)
+    {
+        state.leftEye.targetGeometryScaleX = leftScaleX;
+        state.leftEye.targetGeometryScaleY = leftScaleY;
+
+        state.rightEye.targetGeometryScaleX = rightScaleX;
+        state.rightEye.targetGeometryScaleY = rightScaleY;
+
+        state.targetEyeGap = eyeGap;
+
+        state.targetCornerRadiusScale =
+            cornerRadiusScale;
+
+        // Switching between one eye and two eyes is a layout change.
+        state.cyclopsMode = cyclopsMode;
+    }
+}
+
+// ------------------------------------------------------------
 // RESET ANIMATION
 // ------------------------------------------------------------
 
@@ -1132,6 +1442,19 @@ void reset()
     idleGazeEnabled = true;
 
     automaticBlinkEnabled = true;
+
+    // Restore default geometry.
+    requestedLeftScaleX = 1.0f;
+    requestedLeftScaleY = 1.0f;
+
+    requestedRightScaleX = 1.0f;
+    requestedRightScaleY = 1.0f;
+
+    requestedEyeGap = DEFAULT_EYE_GAP;
+
+    requestedCornerRadiusScale = 1.0f;
+
+    requestedCyclopsMode = false;
 }
 
 } // namespace EmotionRenderer

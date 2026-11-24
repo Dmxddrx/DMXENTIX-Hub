@@ -28,7 +28,7 @@ constexpr int DISPLAY_NATIVE_HEIGHT = 64;
 constexpr int OLED_RESET = -1;
 constexpr uint8_t OLED_PAGE_COUNT = 4;
 // Number of manually selectable eye behaviour tests.
-constexpr uint8_t EYE_DEMO_STEP_COUNT = 25;
+constexpr uint8_t EYE_DEMO_STEP_COUNT = 38;
 
 
 Adafruit_SSD1306 display(
@@ -426,31 +426,49 @@ const char *getDisplayAnimationName(
 const char *getEyeDemoStepName(uint8_t step)
 {
     static const char * const names[EYE_DEMO_STEP_COUNT] = {
-        "NEUTRAL",
-        "HAPPY",
-        "TIRED",
-        "ANGRY",
-        "SURPRISED",
-        "LEFT_HAPPY_RIGHT_ANGRY",
-        "CENTER",
-        "UP",
-        "UP_RIGHT",
-        "RIGHT",
-        "DOWN_RIGHT",
-        "DOWN",
-        "DOWN_LEFT",
-        "LEFT",
-        "UP_LEFT",
-        "BLINK_BOTH",
-        "WINK_LEFT",
-        "WINK_RIGHT",
-        "CLOSE_LEFT",
-        "OPEN_LEFT",
-        "CLOSE_RIGHT",
-        "OPEN_RIGHT",
-        "CLOSE_BOTH",
-        "OPEN_BOTH",
-        "AUTO_IDLE_GAZE"
+        "NEUTRAL",                   // 0
+        "HAPPY",                     // 1
+        "TIRED",                     // 2
+        "ANGRY",                     // 3
+        "SURPRISED",                 // 4
+        "LEFT_HAPPY_RIGHT_ANGRY",    // 5
+        "LEFT_ANGRY_RIGHT_HAPPY",    // 6
+        "CENTER",                    // 7
+        "UP",                        // 8
+        "UP_RIGHT",                  // 9
+        "RIGHT",                     // 10
+        "DOWN_RIGHT",                // 11
+        "DOWN",                      // 12
+        "DOWN_LEFT",                 // 13
+        "LEFT",                      // 14
+        "UP_LEFT",                   // 15
+        "BLINK_BOTH",                // 16
+        "WINK_LEFT",                 // 17
+        "WINK_RIGHT",                // 18
+        "CLOSE_LEFT",                // 19
+        "OPEN_LEFT",                 // 20
+        "CLOSE_RIGHT",               // 21
+        "OPEN_RIGHT",                // 22
+        "CLOSE_BOTH",                // 23
+        "OPEN_BOTH",                 // 24
+        "AUTO_IDLE_GAZE",            // 25
+
+        // --------------------------------------------------------
+        // EYE GEOMETRY TESTS
+        // --------------------------------------------------------
+
+        "DEFAULT_GEOMETRY",          // 26
+        "WIDE_EYES",                  // 27
+        "NARROW_EYES",                // 28
+        "TALL_EYES",                  // 29
+        "SHORT_EYES",                 // 30
+        "CLOSE_SPACING",              // 31
+        "WIDE_SPACING",               // 32
+        "SMALL_RADIUS",               // 33
+        "LARGE_RADIUS",               // 34
+        "INDEPENDENT_GEOMETRY",       // 35
+        "CYCLOPS",                    // 36
+        "RESTORE_EYE_PAIR"            // 37
     };
 
     return step < EYE_DEMO_STEP_COUNT
@@ -466,16 +484,27 @@ void applyEyeDemoStep(uint8_t step)
     using EmotionRenderer::Eye;
     using EmotionRenderer::GazeDirection;
     using EmotionRenderer::Mood;
+    using EmotionRenderer::GeometryPreset;
 
-    // Steps 18-23 form consecutive close/open tests.
+    // Automatic blinking is reserved for the automatic
+    // behaviour test. Manual blink and wink commands still work.
+    EmotionRenderer::setAutomaticBlink(step == 25);
+
+    // Every test starts with predictable default geometry.
+    // Geometry presets below override this when necessary.
+    EmotionRenderer::setGeometryPreset(
+        GeometryPreset::NORMAL
+    );
+
+    // Steps 19-24 form consecutive close/open tests.
     // Preserve the previous eye state during the opening steps.
     const bool openingClosingTest =
-        step >= 18 && step <= 23;
+        step >= 19 && step <= 24;
 
     const bool startNewOpeningClosingTest =
-        step == 18 ||
-        step == 20 ||
-        step == 22;
+        step == 19 ||
+        step == 21 ||
+        step == 23;
 
     // Restore a predictable starting state for other tests.
     if (!openingClosingTest ||
@@ -497,32 +526,36 @@ void applyEyeDemoStep(uint8_t step)
 
     switch (step)
     {
+        // ----------------------------------------------------
+        // BASIC EXPRESSIONS
+        // ----------------------------------------------------
+
         case 0:
             // Neutral rounded-square eyes.
             break;
 
         case 1:
-            // Both eyes happy.
             EmotionRenderer::setMood(Mood::HAPPY);
             break;
 
         case 2:
-            // Both eyes tired.
             EmotionRenderer::setMood(Mood::TIRED);
             break;
 
         case 3:
-            // Both eyes angry.
             EmotionRenderer::setMood(Mood::ANGRY);
             break;
 
         case 4:
-            // Both eyes surprised.
             EmotionRenderer::setMood(Mood::SURPRISED);
             break;
 
+        // ----------------------------------------------------
+        // INDEPENDENT EYE EXPRESSIONS
+        // ----------------------------------------------------
+
         case 5:
-            // Independent left and right expressions.
+            // Left happy, right angry.
             EmotionRenderer::setEyeMood(
                 Eye::LEFT,
                 Mood::HAPPY
@@ -534,59 +567,90 @@ void applyEyeDemoStep(uint8_t step)
             );
             break;
 
+        case 6:
+            // Left angry, right happy.
+            EmotionRenderer::setEyeMood(
+                Eye::LEFT,
+                Mood::ANGRY
+            );
+
+            EmotionRenderer::setEyeMood(
+                Eye::RIGHT,
+                Mood::HAPPY
+            );
+            break;
+
         // ----------------------------------------------------
         // NINE GAZE DIRECTIONS
         // ----------------------------------------------------
 
-        case 6:
-            EmotionRenderer::setGaze(GazeDirection::CENTER);
-            break;
-
         case 7:
-            EmotionRenderer::setGaze(GazeDirection::UP);
+            EmotionRenderer::setGaze(
+                GazeDirection::CENTER
+            );
             break;
 
         case 8:
-            EmotionRenderer::setGaze(GazeDirection::UP_RIGHT);
+            EmotionRenderer::setGaze(
+                GazeDirection::UP
+            );
             break;
 
         case 9:
-            EmotionRenderer::setGaze(GazeDirection::RIGHT);
+            EmotionRenderer::setGaze(
+                GazeDirection::UP_RIGHT
+            );
             break;
 
         case 10:
-            EmotionRenderer::setGaze(GazeDirection::DOWN_RIGHT);
+            EmotionRenderer::setGaze(
+                GazeDirection::RIGHT
+            );
             break;
 
         case 11:
-            EmotionRenderer::setGaze(GazeDirection::DOWN);
+            EmotionRenderer::setGaze(
+                GazeDirection::DOWN_RIGHT
+            );
             break;
 
         case 12:
-            EmotionRenderer::setGaze(GazeDirection::DOWN_LEFT);
+            EmotionRenderer::setGaze(
+                GazeDirection::DOWN
+            );
             break;
 
         case 13:
-            EmotionRenderer::setGaze(GazeDirection::LEFT);
+            EmotionRenderer::setGaze(
+                GazeDirection::DOWN_LEFT
+            );
             break;
 
         case 14:
-            EmotionRenderer::setGaze(GazeDirection::UP_LEFT);
+            EmotionRenderer::setGaze(
+                GazeDirection::LEFT
+            );
+            break;
+
+        case 15:
+            EmotionRenderer::setGaze(
+                GazeDirection::UP_LEFT
+            );
             break;
 
         // ----------------------------------------------------
         // BLINKING AND WINKING
         // ----------------------------------------------------
 
-        case 15:
+        case 16:
             EmotionRenderer::blink(Eye::BOTH);
             break;
 
-        case 16:
+        case 17:
             EmotionRenderer::wink(Eye::LEFT);
             break;
 
-        case 17:
+        case 18:
             EmotionRenderer::wink(Eye::RIGHT);
             break;
 
@@ -594,42 +658,42 @@ void applyEyeDemoStep(uint8_t step)
         // INDEPENDENT EYE OPENING / CLOSING
         // ----------------------------------------------------
 
-        case 18:
-            EmotionRenderer::setEyeOpen(
-                Eye::LEFT,
-                false
-            );
-            break;
-
         case 19:
             EmotionRenderer::setEyeOpen(
                 Eye::LEFT,
-                true
+                false
             );
             break;
 
         case 20:
             EmotionRenderer::setEyeOpen(
-                Eye::RIGHT,
-                false
+                Eye::LEFT,
+                true
             );
             break;
 
         case 21:
             EmotionRenderer::setEyeOpen(
                 Eye::RIGHT,
-                true
+                false
             );
             break;
 
         case 22:
+            EmotionRenderer::setEyeOpen(
+                Eye::RIGHT,
+                true
+            );
+            break;
+
+        case 23:
             EmotionRenderer::setEyeOpen(
                 Eye::BOTH,
                 false
             );
             break;
 
-        case 23:
+        case 24:
             EmotionRenderer::setEyeOpen(
                 Eye::BOTH,
                 true
@@ -640,8 +704,96 @@ void applyEyeDemoStep(uint8_t step)
         // AUTOMATIC BEHAVIOUR
         // ----------------------------------------------------
 
-        case 24:
+        case 25:
             EmotionRenderer::setIdleGaze(true);
+            break;
+
+        // ----------------------------------------------------
+        // EYE GEOMETRY TESTS
+        // ----------------------------------------------------
+
+        case 26:
+            // Restore original eye dimensions and layout.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::NORMAL
+            );
+            break;
+
+        case 27:
+            // Increase both eyes' width.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::WIDE
+            );
+            break;
+
+        case 28:
+            // Reduce both eyes' width.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::NARROW
+            );
+            break;
+
+        case 29:
+            // Increase both eyes' height.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::TALL
+            );
+            break;
+
+        case 30:
+            // Reduce both eyes' height.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::SHORT
+            );
+            break;
+
+        case 31:
+            // Move both eyes closer together.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::CLOSE_SPACING
+            );
+            break;
+
+        case 32:
+            // Move both eyes farther apart.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::WIDE_SPACING
+            );
+            break;
+
+        case 33:
+            // Reduce corner rounding.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::SMALL_RADIUS
+            );
+            break;
+
+        case 34:
+            // Increase corner rounding.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::LARGE_RADIUS
+            );
+            break;
+
+        case 35:
+            // Different dimensions for each eye.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::INDEPENDENT
+            );
+            break;
+
+        case 36:
+            // Replace the normal pair with one central eye.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::CYCLOPS
+            );
+            break;
+
+        case 37:
+            // Restore the original two-eye arrangement.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::RESTORE_EYE_PAIR
+            );
             break;
 
         default:

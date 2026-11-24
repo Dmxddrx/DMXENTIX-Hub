@@ -41,6 +41,23 @@ enum class Eye : uint8_t
     BOTH
 };
 
+// Available eye geometry configurations.
+enum class GeometryPreset : uint8_t
+{
+    NORMAL,
+    WIDE,
+    NARROW,
+    TALL,
+    SHORT,
+    CLOSE_SPACING,
+    WIDE_SPACING,
+    SMALL_RADIUS,
+    LARGE_RADIUS,
+    INDEPENDENT,
+    CYCLOPS,
+    RESTORE_EYE_PAIR
+};
+
 // Draw and update the robot eyes.
 //
 // Landscape: animated face.
@@ -87,6 +104,14 @@ void wink(Eye eye);
 
 // Apply a mood to one eye without changing the other eye.
 void setEyeMood(Eye eye, Mood mood);
+
+// ------------------------------------------------------------
+// EYE GEOMETRY CONTROL
+// ------------------------------------------------------------
+
+// Apply a predefined eye geometry configuration.
+// Geometry changes are smoothly interpolated.
+void setGeometryPreset(GeometryPreset preset);
 
 // Enable or disable automatic periodic blinking.
 void setAutomaticBlink(bool enabled);
