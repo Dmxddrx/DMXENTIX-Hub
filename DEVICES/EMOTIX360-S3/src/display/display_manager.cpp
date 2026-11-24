@@ -5,6 +5,7 @@
 #include "mpu6050.h"
 #include "i2c_manager.h"
 #include "device_config.h"
+#include "emotion_renderer.h"
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -650,6 +651,77 @@ void drawPortraitClockPage(const Status &status)
         120,
         1
     );
+}
+
+// ------------------------------------------------------------
+// PORTRAIT ROBOT FACE PAGE (64 x 128)
+// ------------------------------------------------------------
+
+void drawPortraitRobotFacePage(const Status &status)
+{
+    char dateText[20];
+    char clockText[6];
+
+    // --------------------------------------------------------
+    // DATE
+    // --------------------------------------------------------
+
+    if (status.timeValid)
+    {
+        strftime(
+            dateText,
+            sizeof(dateText),
+            "%a %d %b",
+            &status.localTime
+        );
+    }
+    else
+    {
+        snprintf(
+            dateText,
+            sizeof(dateText),
+            "WAITING NTP"
+        );
+    }
+
+    drawCenteredText(dateText, 2, 1);
+
+    // --------------------------------------------------------
+    // ROBOT EYES
+    // --------------------------------------------------------
+
+    EmotionRenderer::drawNeutralEyes(display);
+
+    // --------------------------------------------------------
+    // NETWORK STATUS
+    // --------------------------------------------------------
+
+    drawCenteredText(
+        status.wifiConnected ? "WIFI ON" : "WIFI OFF",
+        104,
+        1
+    );
+
+    // --------------------------------------------------------
+    // TIME
+    // --------------------------------------------------------
+
+    if (status.timeValid)
+    {
+        snprintf(
+            clockText,
+            sizeof(clockText),
+            "%02d:%02d",
+            status.localTime.tm_hour,
+            status.localTime.tm_min
+        );
+    }
+    else
+    {
+        snprintf(clockText, sizeof(clockText), "--:--");
+    }
+
+    drawCenteredText(clockText, 118, 1);
 }
 
 void drawNetworkPage(const Status &status)
@@ -1326,7 +1398,7 @@ void update(const Status &status)
         switch (status.page)
         {
             case 0:
-                drawPortraitClockPage(status);
+                drawPortraitRobotFacePage(status);
                 break;
 
             case 1:
@@ -1337,8 +1409,12 @@ void update(const Status &status)
                 drawPortraitImuPage(status);
                 break;
 
-            default:
+            case 3:
                 drawPortraitClockPage(status);
+                break;
+
+            default:
+                drawPortraitRobotFacePage(status);
                 break;
         }
     }
@@ -1354,21 +1430,78 @@ void update(const Status &status)
 
         switch (status.page)
         {
+            // --------------------------------------------------------
+            // HOME PAGE — ROBOT FACE
+            // --------------------------------------------------------
+
             case 0:
-                drawClockPage(status);
+            {
+                EmotionRenderer::drawNeutralEyes(display);
+
+                char clockText[6];
+
+                if (status.timeValid)
+                {
+                    snprintf(
+                        clockText,
+                        sizeof(clockText),
+                        "%02d:%02d",
+                        status.localTime.tm_hour,
+                        status.localTime.tm_min
+                    );
+                }
+                else
+                {
+                    snprintf(
+                        clockText,
+                        sizeof(clockText),
+                        "--:--"
+                    );
+                }
+
+                drawCenteredText(
+                    clockText,
+                    55,
+                    1
+                );
+
                 break;
+            }
+
+            // --------------------------------------------------------
+            // NETWORK PAGE
+            // --------------------------------------------------------
 
             case 1:
                 drawNetworkPage(status);
                 break;
 
+            // --------------------------------------------------------
+            // IMU PAGE
+            // --------------------------------------------------------
+
             case 2:
                 drawImuPage(status);
                 break;
 
-            default:
+            // --------------------------------------------------------
+            // FULL CLOCK PAGE
+            // --------------------------------------------------------
+
+            case 3:
                 drawClockPage(status);
                 break;
+
+            default:
+                EmotionRenderer::drawNeutralEyes(display);
+                break;
+        }
+
+        // Keep the mode footer and log strip on the information pages.
+        if (status.page != 0)
+        {
+            drawModeFooter(status);
+            drawLogLine();
         }
 
         drawModeFooter(status);
