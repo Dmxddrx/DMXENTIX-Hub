@@ -425,63 +425,110 @@ const char *getDisplayAnimationName(
 
 void drawRobotPage()
 {
-    // --------------------------------------------------------
-    // TEMPORARY DIRECTIONAL GAZE TEST
-    // --------------------------------------------------------
+    static bool started = false;
+    static uint8_t testStep = 0;
+    static uint32_t lastStepMs = 0;
 
-    static constexpr EmotionRenderer::GazeDirection testGazes[] =
-    {
-        EmotionRenderer::GazeDirection::CENTER,
-        EmotionRenderer::GazeDirection::UP,
-        EmotionRenderer::GazeDirection::UP_RIGHT,
-        EmotionRenderer::GazeDirection::RIGHT,
-        EmotionRenderer::GazeDirection::DOWN_RIGHT,
-        EmotionRenderer::GazeDirection::DOWN,
-        EmotionRenderer::GazeDirection::DOWN_LEFT,
-        EmotionRenderer::GazeDirection::LEFT,
-        EmotionRenderer::GazeDirection::UP_LEFT
-    };
-
-    constexpr uint32_t GAZE_DURATION_MS = 1500;
-
-    static bool testStarted = false;
-    static uint8_t gazeIndex = 0;
-    static uint32_t lastGazeChangeMs = 0;
+    constexpr uint32_t TEST_STEP_MS = 1800;
 
     const uint32_t now = millis();
 
-    if (!testStarted)
+    if (!started)
     {
-        testStarted = true;
-        gazeIndex = 0;
-        lastGazeChangeMs = now;
+        started = true;
+        lastStepMs = now;
 
-        EmotionRenderer::setIdleGaze(false);
-
-        EmotionRenderer::setGaze(
-            testGazes[gazeIndex]
-        );
+        EmotionRenderer::reset();
     }
-    else if ((uint32_t)(now - lastGazeChangeMs) >=
-             GAZE_DURATION_MS)
-    {
-        gazeIndex++;
 
-        if (gazeIndex >=
-            (sizeof(testGazes) / sizeof(testGazes[0])))
+    if ((uint32_t)(now - lastStepMs) >= TEST_STEP_MS)
+    {
+        testStep = (testStep + 1) % 7;
+        lastStepMs = now;
+
+        switch (testStep)
         {
-            gazeIndex = 0;
+            case 0:
+                // Restore both eyes.
+                EmotionRenderer::setMood(
+                    EmotionRenderer::Mood::NEUTRAL
+                );
+
+                EmotionRenderer::setEyeOpen(
+                    EmotionRenderer::Eye::BOTH,
+                    true
+                );
+                break;
+
+            case 1:
+                // Close only the left eye.
+                EmotionRenderer::setEyeOpen(
+                    EmotionRenderer::Eye::LEFT,
+                    false
+                );
+                break;
+
+            case 2:
+                // Open left, close right.
+                EmotionRenderer::setEyeOpen(
+                    EmotionRenderer::Eye::LEFT,
+                    true
+                );
+
+                EmotionRenderer::setEyeOpen(
+                    EmotionRenderer::Eye::RIGHT,
+                    false
+                );
+                break;
+
+            case 3:
+                // Wink with the left eye.
+                EmotionRenderer::setEyeOpen(
+                    EmotionRenderer::Eye::RIGHT,
+                    true
+                );
+
+                EmotionRenderer::wink(
+                    EmotionRenderer::Eye::LEFT
+                );
+                break;
+
+            case 4:
+                // Wink with the right eye.
+                EmotionRenderer::wink(
+                    EmotionRenderer::Eye::RIGHT
+                );
+                break;
+
+            case 5:
+                // Different expressions on each eye.
+                EmotionRenderer::setEyeMood(
+                    EmotionRenderer::Eye::LEFT,
+                    EmotionRenderer::Mood::HAPPY
+                );
+
+                EmotionRenderer::setEyeMood(
+                    EmotionRenderer::Eye::RIGHT,
+                    EmotionRenderer::Mood::ANGRY
+                );
+                break;
+
+            case 6:
+                // Return to normal expression.
+                EmotionRenderer::setMood(
+                    EmotionRenderer::Mood::NEUTRAL
+                );
+
+                EmotionRenderer::setEyeOpen(
+                    EmotionRenderer::Eye::BOTH,
+                    true
+                );
+                break;
         }
 
-        EmotionRenderer::setGaze(
-            testGazes[gazeIndex]
-        );
-
-        lastGazeChangeMs = now;
-
         Serial.printf(
-            "[EYES TEST] Gaze index: %u\n",
-            gazeIndex
+            "[EYES TEST] Independent eye step: %u\n",
+            testStep
         );
     }
 

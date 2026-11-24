@@ -16,8 +16,9 @@ constexpr float DEFAULT_EYE_HEIGHT = 38.0f;
 
 constexpr float DEFAULT_EYE_GAP = 18.0f;
 
-constexpr float MAX_GAZE_X = 5.0f;
-constexpr float MAX_GAZE_Y = 3.0f;
+// Maximum movement of the complete eye pair.
+constexpr float MAX_GAZE_X = 12.0f;
+constexpr float MAX_GAZE_Y = 7.0f;
 
 constexpr uint16_t EYE_COLOR = 1;
 constexpr uint16_t BACKGROUND_COLOR = 0;
@@ -103,8 +104,27 @@ MoodShape getMoodShape(Mood mood)
 
 
 // ------------------------------------------------------------
-// ANIMATION STATE
+// INDEPENDENT EYE ANIMATION STATE
 // ------------------------------------------------------------
+
+struct EyeAnimationState
+{
+    // Smooth eye opening / closing.
+    float openness = 1.0f;
+    float targetOpenness = 1.0f;
+
+    // Independent one-shot blinking.
+    bool blinking = false;
+    uint32_t blinkStartMs = 0;
+
+    // Independent eye geometry.
+    float eyeWidth = DEFAULT_EYE_WIDTH;
+    float eyeHeight = DEFAULT_EYE_HEIGHT;
+
+    float topLid = 0.0f;
+    float bottomLid = 0.0f;
+};
+
 
 struct AnimationState
 {
@@ -112,37 +132,48 @@ struct AnimationState
 
     uint32_t lastFrameMs = 0;
 
-    // Eye geometry.
-    float eyeWidth = DEFAULT_EYE_WIDTH;
-    float eyeHeight = DEFAULT_EYE_HEIGHT;
-
-    float topLid = 0.0f;
-    float bottomLid = 0.0f;
-
-    // Current gaze.
+    // Shared eye movement.
     float gazeX = 0.0f;
     float gazeY = 0.0f;
 
     float targetGazeX = 0.0f;
     float targetGazeY = 0.0f;
 
-    // Automatic blinking.
-    bool blinking = false;
+    // Independent eyes.
+    EyeAnimationState leftEye{};
+    EyeAnimationState rightEye{};
 
-    uint32_t blinkStartMs = 0;
+    // Automatic blinking schedule.
     uint32_t nextBlinkMs = 0;
 
     // Automatic idle gaze.
     uint32_t nextGazeMs = 0;
 };
 
+
 AnimationState state{};
 
+
+// Default expression and independent eye expressions.
 Mood requestedMood = Mood::NEUTRAL;
 
+Mood requestedLeftMood = Mood::NEUTRAL;
+Mood requestedRightMood = Mood::NEUTRAL;
+
+
+// Requested eye opening states.
+float requestedLeftOpenness = 1.0f;
+float requestedRightOpenness = 1.0f;
+
+
+// Preserve blink requests made before the first render.
+bool pendingLeftBlink = false;
+bool pendingRightBlink = false;
+
+
 // Requested manual gaze position.
-GazeDirection requestedGaze =
-    GazeDirection::CENTER;
+GazeDirection requestedGaze = GazeDirection::CENTER;
+
 
 // Automatic idle gaze is enabled by default.
 bool idleGazeEnabled = true;
@@ -229,6 +260,20 @@ float interpolate(
 
 
 // ------------------------------------------------------------
+// START ONE EYE BLINK
+// ------------------------------------------------------------
+
+void startBlink(
+    EyeAnimationState &eye,
+    uint32_t nowMs
+)
+{
+    eye.blinking = true;
+    eye.blinkStartMs = nowMs;
+}
+
+
+// ------------------------------------------------------------
 // INITIALIZE ANIMATION
 // ------------------------------------------------------------
 
@@ -239,7 +284,7 @@ void initializeAnimation(uint32_t nowMs)
     state.initialized = true;
     state.lastFrameMs = nowMs;
 
-    // Restore the requested gaze position after initialization.
+    // Restore requested gaze.
     const GazeOffset initialGaze =
         getGazeOffset(requestedGaze);
 
@@ -249,56 +294,66 @@ void initializeAnimation(uint32_t nowMs)
     state.targetGazeX = initialGaze.x;
     state.targetGazeY = initialGaze.y;
 
+    // Restore independent opening states.
+    state.leftEye.openness = requestedLeftOpenness;
+    state.leftEye.targetOpenness = requestedLeftOpenness;
+
+    state.rightEye.openness = requestedRightOpenness;
+    state.rightEye.targetOpenness = requestedRightOpenness;
+
+    // Schedule automatic blinking.
     state.nextBlinkMs =
         nowMs + random(
             MIN_BLINK_INTERVAL_MS,
             MAX_BLINK_INTERVAL_MS
         );
 
+    // Schedule automatic gaze.
     state.nextGazeMs =
         nowMs + random(
             MIN_GAZE_INTERVAL_MS,
             MAX_GAZE_INTERVAL_MS
         );
+
+    // Restore any blink requests made before initialization.
+    if (pendingLeftBlink)
+    {
+        startBlink(state.leftEye, nowMs);
+        pendingLeftBlink = false;
+    }
+
+    if (pendingRightBlink)
+    {
+        startBlink(state.rightEye, nowMs);
+        pendingRightBlink = false;
+    }
 }
 
 
 // ------------------------------------------------------------
-// AUTOMATIC BLINKING
+// UPDATE ONE EYE BLINK
 // ------------------------------------------------------------
 
-float updateBlink(uint32_t nowMs)
+float updateBlink(
+    EyeAnimationState &eye,
+    uint32_t nowMs
+)
 {
-    // Start a new blink when its scheduled time arrives.
-    if (!state.blinking &&
-        timeReached(nowMs, state.nextBlinkMs))
-    {
-        state.blinking = true;
-        state.blinkStartMs = nowMs;
-    }
-
-    if (!state.blinking)
+    if (!eye.blinking)
     {
         return 1.0f;
     }
 
     const uint32_t elapsed =
-        nowMs - state.blinkStartMs;
+        nowMs - eye.blinkStartMs;
 
     const uint32_t totalDuration =
         BLINK_CLOSE_MS + BLINK_OPEN_MS;
 
-    // Blink has completed.
+    // Blink completed.
     if (elapsed >= totalDuration)
     {
-        state.blinking = false;
-
-        state.nextBlinkMs =
-            nowMs + random(
-                MIN_BLINK_INTERVAL_MS,
-                MAX_BLINK_INTERVAL_MS
-            );
-
+        eye.blinking = false;
         return 1.0f;
     }
 
@@ -321,6 +376,29 @@ float updateBlink(uint32_t nowMs)
 
     return 0.06f +
         (0.94f * smoothStep(progress));
+}
+
+
+// ------------------------------------------------------------
+// AUTOMATIC TWO-EYE BLINKING
+// ------------------------------------------------------------
+
+void updateAutomaticBlink(uint32_t nowMs)
+{
+    if (!timeReached(nowMs, state.nextBlinkMs))
+    {
+        return;
+    }
+
+    // Automatic blinking always affects both eyes.
+    startBlink(state.leftEye, nowMs);
+    startBlink(state.rightEye, nowMs);
+
+    state.nextBlinkMs =
+        nowMs + random(
+            MIN_BLINK_INTERVAL_MS,
+            MAX_BLINK_INTERVAL_MS
+        );
 }
 
 
@@ -372,19 +450,19 @@ void updateIdleGaze(uint32_t nowMs)
 
 
 // ------------------------------------------------------------
-// DRAW EYE MOOD OVERLAYS
+// DRAW ONE EYE MOOD OVERLAY
 // ------------------------------------------------------------
 
 void drawMoodOverlay(
     Adafruit_GFX &canvas,
-    int16_t leftX,
-    int16_t rightX,
+    int16_t eyeX,
     int16_t eyeY,
     int16_t eyeWidth,
     int16_t visibleHeight,
     int16_t topLid,
     int16_t bottomLid,
-    bool angry
+    bool angry,
+    bool rightEye
 )
 {
     if (visibleHeight <= 2)
@@ -393,7 +471,7 @@ void drawMoodOverlay(
     }
 
     const int16_t maxLidHeight =
-        static_cast<int16_t>(visibleHeight - 2);
+        visibleHeight - 2;
 
     const int16_t safeTopLid =
         (topLid < maxLidHeight)
@@ -406,48 +484,45 @@ void drawMoodOverlay(
         : maxLidHeight;
 
     // --------------------------------------------------------
-    // TIRED / ANGRY TOP EYELIDS
+    // TIRED / ANGRY TOP EYELID
     // --------------------------------------------------------
 
     if (safeTopLid > 0)
     {
         if (angry)
         {
-            // Left eye: inward sloping eyelid.
-            canvas.fillTriangle(
-                leftX,
-                eyeY,
-                leftX + eyeWidth,
-                eyeY,
-                leftX + eyeWidth,
-                eyeY + safeTopLid,
-                BACKGROUND_COLOR
-            );
-
-            // Right eye: inward sloping eyelid.
-            canvas.fillTriangle(
-                rightX,
-                eyeY,
-                rightX + eyeWidth,
-                eyeY,
-                rightX,
-                eyeY + safeTopLid,
-                BACKGROUND_COLOR
-            );
+            if (!rightEye)
+            {
+                // Left eye: inward sloping eyelid.
+                canvas.fillTriangle(
+                    eyeX,
+                    eyeY,
+                    eyeX + eyeWidth,
+                    eyeY,
+                    eyeX + eyeWidth,
+                    eyeY + safeTopLid,
+                    BACKGROUND_COLOR
+                );
+            }
+            else
+            {
+                // Right eye: inward sloping eyelid.
+                canvas.fillTriangle(
+                    eyeX,
+                    eyeY,
+                    eyeX + eyeWidth,
+                    eyeY,
+                    eyeX,
+                    eyeY + safeTopLid,
+                    BACKGROUND_COLOR
+                );
+            }
         }
         else
         {
-            // Tired expression: straight upper eyelids.
+            // Tired expression.
             canvas.fillRect(
-                leftX,
-                eyeY,
-                eyeWidth + 1,
-                safeTopLid,
-                BACKGROUND_COLOR
-            );
-
-            canvas.fillRect(
-                rightX,
+                eyeX,
                 eyeY,
                 eyeWidth + 1,
                 safeTopLid,
@@ -457,7 +532,7 @@ void drawMoodOverlay(
     }
 
     // --------------------------------------------------------
-    // HAPPY BOTTOM EYELIDS
+    // HAPPY BOTTOM EYELID
     // --------------------------------------------------------
 
     if (safeBottomLid > 0)
@@ -469,16 +544,7 @@ void drawMoodOverlay(
             eyeWidth / 3;
 
         canvas.fillRoundRect(
-            leftX - 1,
-            bottomY,
-            eyeWidth + 2,
-            safeBottomLid + 2,
-            radius,
-            BACKGROUND_COLOR
-        );
-
-        canvas.fillRoundRect(
-            rightX - 1,
+            eyeX - 1,
             bottomY,
             eyeWidth + 2,
             safeBottomLid + 2,
@@ -486,6 +552,129 @@ void drawMoodOverlay(
             BACKGROUND_COLOR
         );
     }
+}
+
+// ------------------------------------------------------------
+// UPDATE ONE EYE'S EXPRESSION GEOMETRY
+// ------------------------------------------------------------
+
+void updateEyeShape(
+    EyeAnimationState &eye,
+    const MoodShape &target,
+    float blend
+)
+{
+    eye.eyeWidth = interpolate(
+        eye.eyeWidth,
+        target.width,
+        blend
+    );
+
+    eye.eyeHeight = interpolate(
+        eye.eyeHeight,
+        target.height,
+        blend
+    );
+
+    eye.topLid = interpolate(
+        eye.topLid,
+        target.topLid,
+        blend
+    );
+
+    eye.bottomLid = interpolate(
+        eye.bottomLid,
+        target.bottomLid,
+        blend
+    );
+}
+
+// ------------------------------------------------------------
+// DRAW ONE INDEPENDENT ROUNDED-SQUARE ROBOT EYE
+// ------------------------------------------------------------
+
+void drawSingleEye(
+    Adafruit_GFX &canvas,
+    EyeAnimationState &eye,
+    int16_t eyeX,
+    int16_t centerY,
+    const MoodShape &mood,
+    bool rightEye,
+    uint32_t nowMs
+)
+{
+    const int16_t eyeWidth =
+        static_cast<int16_t>(
+            eye.eyeWidth + 0.5f
+        );
+
+    const int16_t eyeHeight =
+        static_cast<int16_t>(
+            eye.eyeHeight + 0.5f
+        );
+
+    // Apply independent opening and blinking.
+    const float blinkScale =
+        updateBlink(eye, nowMs);
+
+    const float totalScale =
+        eye.openness * blinkScale;
+
+    const int16_t visibleHeight =
+        static_cast<int16_t>(
+            eyeHeight * totalScale + 0.5f
+        );
+
+    // Closed eye.
+    if (visibleHeight <= 2)
+    {
+        canvas.drawFastHLine(
+            eyeX + 2,
+            centerY,
+            eyeWidth - 4,
+            EYE_COLOR
+        );
+
+        return;
+    }
+
+    const int16_t eyeY =
+        centerY - visibleHeight / 2;
+
+    const int16_t cornerRadius =
+        min(
+            eyeWidth / 3,
+            visibleHeight / 2
+        );
+
+    // --------------------------------------------------------
+    // DRAW ROUNDED-SQUARE EYE
+    // --------------------------------------------------------
+
+    canvas.fillRoundRect(
+        eyeX,
+        eyeY,
+        eyeWidth,
+        visibleHeight,
+        cornerRadius,
+        EYE_COLOR
+    );
+
+    // --------------------------------------------------------
+    // APPLY INDIVIDUAL EXPRESSION
+    // --------------------------------------------------------
+
+    drawMoodOverlay(
+        canvas,
+        eyeX,
+        eyeY,
+        eyeWidth,
+        visibleHeight,
+        static_cast<int16_t>(eye.topLid + 0.5f),
+        static_cast<int16_t>(eye.bottomLid + 0.5f),
+        mood.angry,
+        rightEye
+    );
 }
 
 
@@ -521,39 +710,35 @@ void drawLandscapeEyes(
             -static_cast<float>(deltaMs) / 140.0f
         );
 
-    // Get requested expression geometry.
-    const MoodShape target =
-        getMoodShape(requestedMood);
+    // --------------------------------------------------------
+    // UPDATE INDEPENDENT EYE EXPRESSIONS
+    // --------------------------------------------------------
 
-    // Smoothly transition eye geometry.
-    state.eyeWidth = interpolate(
-        state.eyeWidth,
-        target.width,
+    const MoodShape leftMood =
+        getMoodShape(requestedLeftMood);
+
+    const MoodShape rightMood =
+        getMoodShape(requestedRightMood);
+
+    updateEyeShape(
+        state.leftEye,
+        leftMood,
         blend
     );
 
-    state.eyeHeight = interpolate(
-        state.eyeHeight,
-        target.height,
+    updateEyeShape(
+        state.rightEye,
+        rightMood,
         blend
     );
 
-    state.topLid = interpolate(
-        state.topLid,
-        target.topLid,
-        blend
-    );
+    // --------------------------------------------------------
+    // UPDATE AUTOMATIC BEHAVIOUR
+    // --------------------------------------------------------
 
-    state.bottomLid = interpolate(
-        state.bottomLid,
-        target.bottomLid,
-        blend
-    );
-
-    // Update automatic behaviour.
     updateIdleGaze(nowMs);
 
-    // Smooth gaze movement.
+    // Smooth complete-eye movement.
     state.gazeX = interpolate(
         state.gazeX,
         state.targetGazeX,
@@ -566,112 +751,88 @@ void drawLandscapeEyes(
         blend
     );
 
-    // Update blinking.
-    const float blinkScale =
-        updateBlink(nowMs);
+    // Automatic blinking still affects both eyes.
+    updateAutomaticBlink(nowMs);
 
     // --------------------------------------------------------
-    // CALCULATE EYE DIMENSIONS
+    // CALCULATE INDEPENDENT EYE POSITIONS
     // --------------------------------------------------------
 
-    const int16_t eyeWidth =
+    const int16_t leftWidth =
         static_cast<int16_t>(
-            state.eyeWidth + 0.5f
+            state.leftEye.eyeWidth + 0.5f
         );
 
-    const int16_t eyeHeight =
+    const int16_t rightWidth =
         static_cast<int16_t>(
-            state.eyeHeight + 0.5f
+            state.rightEye.eyeWidth + 0.5f
         );
-
-    const int16_t calculatedHeight =
-        static_cast<int16_t>(
-            eyeHeight * blinkScale
-        );
-
-    const int16_t visibleHeight =
-        (calculatedHeight < 2)
-        ? 2
-        : calculatedHeight;
 
     const int16_t eyeGap =
         static_cast<int16_t>(
             DEFAULT_EYE_GAP
         );
 
-    // --------------------------------------------------------
-    // CALCULATE EYE POSITIONS
-    // --------------------------------------------------------
-
     const int16_t totalWidth =
-        eyeWidth * 2 + eyeGap;
+        leftWidth + rightWidth + eyeGap;
 
-    const int16_t baseX =
+    // Keep the complete eye pair centred.
+    const int16_t leftX =
         (canvas.width() - totalWidth) / 2;
 
-    const int16_t gazeOffsetX =
-        static_cast<int16_t>(
-            state.gazeX + 0.5f
-        );
-
-    const int16_t gazeOffsetY =
-        static_cast<int16_t>(
-            state.gazeY + 0.5f
-        );
-
-    const int16_t leftX =
-        baseX + gazeOffsetX;
-
     const int16_t rightX =
-        leftX + eyeWidth + eyeGap;
+        leftX + leftWidth + eyeGap;
 
-    const int16_t eyeY =
-        (canvas.height() - eyeHeight) / 2 +
-        gazeOffsetY +
-        (eyeHeight - visibleHeight) / 2;
+    const int16_t centerY =
+        canvas.height() / 2;
 
-    const int16_t radius =
-        min(
-            eyeWidth / 3,
-            visibleHeight / 2
+    // --------------------------------------------------------
+    // CALCULATE COMPLETE EYE PAIR POSITION
+    // --------------------------------------------------------
+
+    const int16_t eyeOffsetX =
+        static_cast<int16_t>(
+            state.gazeX >= 0.0f
+            ? state.gazeX + 0.5f
+            : state.gazeX - 0.5f
         );
 
-    // --------------------------------------------------------
-    // DRAW LEFT AND RIGHT EYES
-    // --------------------------------------------------------
+    const int16_t eyeOffsetY =
+        static_cast<int16_t>(
+            state.gazeY >= 0.0f
+            ? state.gazeY + 0.5f
+            : state.gazeY - 0.5f
+        );
 
-    canvas.fillRoundRect(
-        leftX,
-        eyeY,
-        eyeWidth,
-        visibleHeight,
-        radius,
-        EYE_COLOR
-    );
-
-    canvas.fillRoundRect(
-        rightX,
-        eyeY,
-        eyeWidth,
-        visibleHeight,
-        radius,
-        EYE_COLOR
-    );
+    const int16_t eyeCenterY =
+        centerY + eyeOffsetY;
 
     // --------------------------------------------------------
-    // APPLY EXPRESSION
+    // DRAW LEFT EYE
     // --------------------------------------------------------
 
-    drawMoodOverlay(
+    drawSingleEye(
         canvas,
-        leftX,
-        rightX,
-        eyeY,
-        eyeWidth,
-        visibleHeight,
-        static_cast<int16_t>(state.topLid + 0.5f),
-        static_cast<int16_t>(state.bottomLid + 0.5f),
-        target.angry
+        state.leftEye,
+        leftX + eyeOffsetX,
+        eyeCenterY,
+        leftMood,
+        false,
+        nowMs
+    );
+
+    // --------------------------------------------------------
+    // DRAW RIGHT EYE
+    // --------------------------------------------------------
+
+    drawSingleEye(
+        canvas,
+        state.rightEye,
+        rightX + eyeOffsetX,
+        eyeCenterY,
+        rightMood,
+        true,
+        nowMs
     );
 }
 
@@ -767,6 +928,10 @@ void drawRobotEyes(
 void setMood(Mood mood)
 {
     requestedMood = mood;
+
+    // A normal mood change affects both eyes.
+    requestedLeftMood = mood;
+    requestedRightMood = mood;
 }
 
 
@@ -815,6 +980,106 @@ void setIdleGaze(bool enabled)
 }
 
 // ------------------------------------------------------------
+// INDEPENDENT EYE OPEN / CLOSE
+// ------------------------------------------------------------
+
+void setEyeOpen(Eye eye, bool open)
+{
+    const float target =
+        open ? 1.0f : 0.0f;
+
+    if (eye == Eye::LEFT || eye == Eye::BOTH)
+    {
+        requestedLeftOpenness = target;
+
+        if (state.initialized)
+        {
+            state.leftEye.targetOpenness = target;
+        }
+    }
+
+    if (eye == Eye::RIGHT || eye == Eye::BOTH)
+    {
+        requestedRightOpenness = target;
+
+        if (state.initialized)
+        {
+            state.rightEye.targetOpenness = target;
+        }
+    }
+}
+
+
+// ------------------------------------------------------------
+// MANUAL BLINK
+// ------------------------------------------------------------
+
+void blink(Eye eye)
+{
+    const uint32_t nowMs = millis();
+
+    if (eye == Eye::LEFT || eye == Eye::BOTH)
+    {
+        if (state.initialized)
+        {
+            startBlink(state.leftEye, nowMs);
+        }
+        else
+        {
+            pendingLeftBlink = true;
+        }
+    }
+
+    if (eye == Eye::RIGHT || eye == Eye::BOTH)
+    {
+        if (state.initialized)
+        {
+            startBlink(state.rightEye, nowMs);
+        }
+        else
+        {
+            pendingRightBlink = true;
+        }
+    }
+}
+
+
+// ------------------------------------------------------------
+// ONE-EYE WINK
+// ------------------------------------------------------------
+
+void wink(Eye eye)
+{
+    if (eye == Eye::LEFT || eye == Eye::RIGHT)
+    {
+        blink(eye);
+    }
+}
+
+
+// ------------------------------------------------------------
+// INDEPENDENT EYE MOOD
+// ------------------------------------------------------------
+
+void setEyeMood(Eye eye, Mood mood)
+{
+    if (eye == Eye::BOTH)
+    {
+        setMood(mood);
+        return;
+    }
+
+    if (eye == Eye::LEFT)
+    {
+        requestedLeftMood = mood;
+    }
+    else if (eye == Eye::RIGHT)
+    {
+        requestedRightMood = mood;
+    }
+}
+
+// ------------------------------------------------------------
 // RESET ANIMATION
 // ------------------------------------------------------------
 
@@ -823,6 +1088,15 @@ void reset()
     state = AnimationState{};
 
     requestedMood = Mood::NEUTRAL;
+
+    requestedLeftMood = Mood::NEUTRAL;
+    requestedRightMood = Mood::NEUTRAL;
+
+    requestedLeftOpenness = 1.0f;
+    requestedRightOpenness = 1.0f;
+
+    pendingLeftBlink = false;
+    pendingRightBlink = false;
 
     requestedGaze = GazeDirection::CENTER;
 

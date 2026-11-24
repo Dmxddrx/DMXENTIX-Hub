@@ -33,6 +33,14 @@ enum class GazeDirection : uint8_t
     UP_LEFT
 };
 
+// Select which eye receives an animation or expression.
+enum class Eye : uint8_t
+{
+    LEFT,
+    RIGHT,
+    BOTH
+};
+
 // Draw and update the robot eyes.
 //
 // Landscape: animated face.
@@ -62,6 +70,23 @@ void setGaze(GazeDirection direction);
 
 // Enable or disable automatic random idle gaze.
 void setIdleGaze(bool enabled);
+
+// ------------------------------------------------------------
+// INDEPENDENT EYE CONTROL
+// ------------------------------------------------------------
+
+// Smoothly open or close the selected eye(s).
+void setEyeOpen(Eye eye, bool open);
+
+// Play a one-shot blink on the selected eye(s).
+void blink(Eye eye = Eye::BOTH);
+
+// Convenience function for blinking only one eye.
+// Use Eye::LEFT or Eye::RIGHT.
+void wink(Eye eye);
+
+// Apply a mood to one eye without changing the other eye.
+void setEyeMood(Eye eye, Mood mood);
 
 // Reset animation state.
 void reset();
