@@ -140,6 +140,59 @@ AnimationState state{};
 
 Mood requestedMood = Mood::NEUTRAL;
 
+// Requested manual gaze position.
+GazeDirection requestedGaze =
+    GazeDirection::CENTER;
+
+// Automatic idle gaze is enabled by default.
+bool idleGazeEnabled = true;
+
+
+// ------------------------------------------------------------
+// GAZE DIRECTION COORDINATES
+// ------------------------------------------------------------
+
+struct GazeOffset
+{
+    float x;
+    float y;
+};
+
+
+GazeOffset getGazeOffset(GazeDirection direction)
+{
+    switch (direction)
+    {
+        case GazeDirection::UP:
+            return {0.0f, -MAX_GAZE_Y};
+
+        case GazeDirection::UP_RIGHT:
+            return {MAX_GAZE_X, -MAX_GAZE_Y};
+
+        case GazeDirection::RIGHT:
+            return {MAX_GAZE_X, 0.0f};
+
+        case GazeDirection::DOWN_RIGHT:
+            return {MAX_GAZE_X, MAX_GAZE_Y};
+
+        case GazeDirection::DOWN:
+            return {0.0f, MAX_GAZE_Y};
+
+        case GazeDirection::DOWN_LEFT:
+            return {-MAX_GAZE_X, MAX_GAZE_Y};
+
+        case GazeDirection::LEFT:
+            return {-MAX_GAZE_X, 0.0f};
+
+        case GazeDirection::UP_LEFT:
+            return {-MAX_GAZE_X, -MAX_GAZE_Y};
+
+        case GazeDirection::CENTER:
+        default:
+            return {0.0f, 0.0f};
+    }
+}
+
 
 // ------------------------------------------------------------
 // TIME HELPERS
@@ -185,6 +238,16 @@ void initializeAnimation(uint32_t nowMs)
 
     state.initialized = true;
     state.lastFrameMs = nowMs;
+
+    // Restore the requested gaze position after initialization.
+    const GazeOffset initialGaze =
+        getGazeOffset(requestedGaze);
+
+    state.gazeX = initialGaze.x;
+    state.gazeY = initialGaze.y;
+
+    state.targetGazeX = initialGaze.x;
+    state.targetGazeY = initialGaze.y;
 
     state.nextBlinkMs =
         nowMs + random(
@@ -267,6 +330,12 @@ float updateBlink(uint32_t nowMs)
 
 void updateIdleGaze(uint32_t nowMs)
 {
+    // Manual gaze takes priority over automatic idle gaze.
+    if (!idleGazeEnabled)
+    {
+        return;
+    }
+
     if (!timeReached(nowMs, state.nextGazeMs))
     {
         return;
@@ -706,6 +775,44 @@ Mood getMood()
     return requestedMood;
 }
 
+// ------------------------------------------------------------
+// MANUAL GAZE CONTROL
+// ------------------------------------------------------------
+
+void setGaze(GazeDirection direction)
+{
+    requestedGaze = direction;
+
+    // Manual gaze takes priority.
+    idleGazeEnabled = false;
+
+    const GazeOffset target =
+        getGazeOffset(direction);
+
+    // Set the target without interrupting smooth interpolation.
+    state.targetGazeX = target.x;
+    state.targetGazeY = target.y;
+}
+
+
+// ------------------------------------------------------------
+// AUTOMATIC IDLE GAZE CONTROL
+// ------------------------------------------------------------
+
+void setIdleGaze(bool enabled)
+{
+    idleGazeEnabled = enabled;
+
+    // Schedule the next automatic gaze movement.
+    if (enabled)
+    {
+        state.nextGazeMs =
+            millis() + random(
+                MIN_GAZE_INTERVAL_MS,
+                MAX_GAZE_INTERVAL_MS
+            );
+    }
+}
 
 // ------------------------------------------------------------
 // RESET ANIMATION
@@ -714,7 +821,12 @@ Mood getMood()
 void reset()
 {
     state = AnimationState{};
+
     requestedMood = Mood::NEUTRAL;
+
+    requestedGaze = GazeDirection::CENTER;
+
+    idleGazeEnabled = true;
 }
 
 } // namespace EmotionRenderer

@@ -17,6 +17,22 @@ enum class Mood : uint8_t
     SURPRISED
 };
 
+// Available gaze directions.
+enum class GazeDirection : uint8_t
+{
+    CENTER,
+
+    UP,
+    UP_RIGHT,
+    RIGHT,
+    DOWN_RIGHT,
+
+    DOWN,
+    DOWN_LEFT,
+    LEFT,
+    UP_LEFT
+};
+
 // Draw and update the robot eyes.
 //
 // Landscape: animated face.
@@ -39,6 +55,13 @@ void setMood(Mood mood);
 
 // Get the requested eye expression.
 Mood getMood();
+
+// Set a manual eye gaze direction.
+// Manual gaze disables automatic idle gaze.
+void setGaze(GazeDirection direction);
+
+// Enable or disable automatic random idle gaze.
+void setIdleGaze(bool enabled);
 
 // Reset animation state.
 void reset();

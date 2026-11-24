@@ -426,61 +426,65 @@ const char *getDisplayAnimationName(
 void drawRobotPage()
 {
     // --------------------------------------------------------
-    // TEMPORARY MOOD TEST SEQUENCE
+    // TEMPORARY DIRECTIONAL GAZE TEST
     // --------------------------------------------------------
 
-    static constexpr EmotionRenderer::Mood testMoods[] =
+    static constexpr EmotionRenderer::GazeDirection testGazes[] =
     {
-        EmotionRenderer::Mood::NEUTRAL,
-        EmotionRenderer::Mood::HAPPY,
-        EmotionRenderer::Mood::TIRED,
-        EmotionRenderer::Mood::ANGRY,
-        EmotionRenderer::Mood::SURPRISED
+        EmotionRenderer::GazeDirection::CENTER,
+        EmotionRenderer::GazeDirection::UP,
+        EmotionRenderer::GazeDirection::UP_RIGHT,
+        EmotionRenderer::GazeDirection::RIGHT,
+        EmotionRenderer::GazeDirection::DOWN_RIGHT,
+        EmotionRenderer::GazeDirection::DOWN,
+        EmotionRenderer::GazeDirection::DOWN_LEFT,
+        EmotionRenderer::GazeDirection::LEFT,
+        EmotionRenderer::GazeDirection::UP_LEFT
     };
 
-    constexpr uint32_t MOOD_DURATION_MS = 8000;
+    constexpr uint32_t GAZE_DURATION_MS = 1500;
 
     static bool testStarted = false;
-    static uint8_t moodIndex = 0;
-    static uint32_t lastMoodChangeMs = 0;
+    static uint8_t gazeIndex = 0;
+    static uint32_t lastGazeChangeMs = 0;
 
     const uint32_t now = millis();
 
-    // Initialize the first expression.
     if (!testStarted)
     {
         testStarted = true;
-        moodIndex = 0;
-        lastMoodChangeMs = now;
+        gazeIndex = 0;
+        lastGazeChangeMs = now;
 
-        EmotionRenderer::setMood(testMoods[moodIndex]);
+        EmotionRenderer::setIdleGaze(false);
 
-        Serial.println("[EYES TEST] NEUTRAL");
+        EmotionRenderer::setGaze(
+            testGazes[gazeIndex]
+        );
     }
-
-    // Change expression every three seconds.
-    else if ((uint32_t)(now - lastMoodChangeMs) >=
-             MOOD_DURATION_MS)
+    else if ((uint32_t)(now - lastGazeChangeMs) >=
+             GAZE_DURATION_MS)
     {
-        moodIndex++;
+        gazeIndex++;
 
-        if (moodIndex >=
-            (sizeof(testMoods) / sizeof(testMoods[0])))
+        if (gazeIndex >=
+            (sizeof(testGazes) / sizeof(testGazes[0])))
         {
-            moodIndex = 0;
+            gazeIndex = 0;
         }
 
-        EmotionRenderer::setMood(testMoods[moodIndex]);
+        EmotionRenderer::setGaze(
+            testGazes[gazeIndex]
+        );
 
-        lastMoodChangeMs = now;
+        lastGazeChangeMs = now;
 
         Serial.printf(
-            "[EYES TEST] Mood index: %u\n",
-            moodIndex
+            "[EYES TEST] Gaze index: %u\n",
+            gazeIndex
         );
     }
 
-    // Render the animated face.
     EmotionRenderer::drawRobotEyes(display, now);
 }
 
