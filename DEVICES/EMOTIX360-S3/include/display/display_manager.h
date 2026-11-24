@@ -25,6 +25,14 @@ struct Status {
     uint8_t page = 0;
     uint8_t brightness = 5;
 
+    // Manual eye-demo state.
+    bool eyeDemoActive = false;
+    uint8_t eyeDemoStep = 0;
+
+    // Changes each time a new eye-demo session starts.
+    // Prevents an old test state from being reused.
+    uint32_t eyeDemoSession = 0;
+
     bool externalPowerPresent = false;
     int batteryPercent = -1;
 };
@@ -63,6 +71,9 @@ void setApplicationStatus(
 void setBluetoothStatus(bool connected);
 void setAnimationMode(const char *modeName);
 bool nextPage();
+// Advance or exit the manually controlled eye behaviour demo.
+bool nextEyeDemoStep();
+bool exitEyeDemo();
 
 void requestUpdate();
 

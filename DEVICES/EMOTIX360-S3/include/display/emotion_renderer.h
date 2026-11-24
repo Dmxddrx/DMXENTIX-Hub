@@ -88,6 +88,9 @@ void wink(Eye eye);
 // Apply a mood to one eye without changing the other eye.
 void setEyeMood(Eye eye, Mood mood);
 
+// Enable or disable automatic periodic blinking.
+void setAutomaticBlink(bool enabled);
+
 // Reset animation state.
 void reset();
 

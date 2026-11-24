@@ -22,6 +22,10 @@ constexpr uint8_t MATRIX_CS   = 10;
 // Active LOW: button connects GPIO14 to GND when pressed.
 constexpr uint8_t BUTTON_ANIMATION = 14;
 
+// Dedicated eye behaviour test button.
+// Active LOW: button connects GPIO21 to GND when pressed.
+constexpr uint8_t BUTTON_EYE_TEST = 21;
+
 }
 
 #endif

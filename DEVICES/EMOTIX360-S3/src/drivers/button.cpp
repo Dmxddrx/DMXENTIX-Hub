@@ -4,6 +4,7 @@
 #include "pin_config.h"
 #include "animation_manager.h"
 #include "display_manager.h"
+#include "emotion_renderer.h"
 
 #include <Arduino.h>
 
@@ -184,6 +185,23 @@ void buttonTask(void *parameter)
 
     uint32_t pressStartedMs = 0;
 
+    // ------------------------------------------------------------
+    // EYE-DEMO BUTTON STATE
+    // ------------------------------------------------------------
+
+    // Independent debounce state for GPIO21.
+    bool eyeTestLastRawPressed =
+        (digitalRead(PinConfig::BUTTON_EYE_TEST) == LOW);
+
+    bool eyeTestStablePressed = eyeTestLastRawPressed;
+
+    uint32_t eyeTestLastRawChangeMs = millis();
+
+    bool eyeTestPressTimingActive = false;
+    uint32_t eyeTestPressStartedMs = 0;
+
+
+
     TickType_t lastWakeTime = xTaskGetTickCount();
 
     TickType_t pollInterval =
@@ -264,6 +282,77 @@ void buttonTask(void *parameter)
             }
         }
 
+        // ----------------------------------------------------
+        // EYE-DEMO BUTTON — GPIO21
+        // ----------------------------------------------------
+
+        const bool eyeTestRawPressed =
+            (digitalRead(PinConfig::BUTTON_EYE_TEST) == LOW);
+
+        // Detect raw electrical state changes.
+        if (eyeTestRawPressed != eyeTestLastRawPressed)
+        {
+            eyeTestLastRawPressed = eyeTestRawPressed;
+            eyeTestLastRawChangeMs = nowMs;
+        }
+
+        // Accept a state change after the debounce interval.
+        if ((uint32_t)(nowMs - eyeTestLastRawChangeMs) >=
+            BUTTON_DEBOUNCE_MS)
+        {
+            if (eyeTestStablePressed != eyeTestLastRawPressed)
+            {
+                eyeTestStablePressed = eyeTestLastRawPressed;
+
+                // --------------------------------------------
+                // EYE-TEST BUTTON PRESSED
+                // --------------------------------------------
+
+                if (eyeTestStablePressed)
+                {
+                    eyeTestPressStartedMs =
+                        eyeTestLastRawChangeMs;
+
+                    eyeTestPressTimingActive = true;
+                }
+
+                // --------------------------------------------
+                // EYE-TEST BUTTON RELEASED
+                // --------------------------------------------
+
+                else if (eyeTestPressTimingActive)
+                {
+                    const uint32_t pressDurationMs =
+                        eyeTestLastRawChangeMs -
+                        eyeTestPressStartedMs;
+
+                    eyeTestPressTimingActive = false;
+
+                    // LONG PRESS: EXIT EYE DEMO.
+                    if (pressDurationMs >= BUTTON_LONG_PRESS_MS)
+                    {
+                        if (DisplayManager::exitEyeDemo())
+                        {
+                            Serial.println(
+                                "[BUTTON] Eye demo exited"
+                            );
+                        }
+                    }
+
+                    // SHORT PRESS: NEXT EYE BEHAVIOUR.
+                    else
+                    {
+                        if (DisplayManager::nextEyeDemoStep())
+                        {
+                            Serial.println(
+                                "[BUTTON] Eye demo advanced"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         // Schedule the next sample.
         vTaskDelayUntil(
             &lastWakeTime,
@@ -284,8 +373,9 @@ bool begin(AnimationManager::Mode initialMode)
         return true;
     }
 
-    // Configure the tactile button with the internal pull-up.
+    // Configure both tactile buttons with internal pull-ups.
     pinMode(PinConfig::BUTTON_ANIMATION, INPUT_PULLUP);
+    pinMode(PinConfig::BUTTON_EYE_TEST, INPUT_PULLUP);
 
     // Synchronize the button manager with AnimationManager.
     currentMode = initialMode;

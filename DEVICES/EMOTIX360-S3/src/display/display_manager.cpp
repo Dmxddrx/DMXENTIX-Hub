@@ -27,6 +27,8 @@ constexpr int DISPLAY_NATIVE_WIDTH = 128;
 constexpr int DISPLAY_NATIVE_HEIGHT = 64;
 constexpr int OLED_RESET = -1;
 constexpr uint8_t OLED_PAGE_COUNT = 4;
+// Number of manually selectable eye behaviour tests.
+constexpr uint8_t EYE_DEMO_STEP_COUNT = 25;
 
 
 Adafruit_SSD1306 display(
@@ -417,118 +419,288 @@ const char *getDisplayAnimationName(
     return mode;
 }
 
+// ============================================================
+// EYE DEMO SEQUENCE
+// ============================================================
+
+const char *getEyeDemoStepName(uint8_t step)
+{
+    static const char * const names[EYE_DEMO_STEP_COUNT] = {
+        "NEUTRAL",
+        "HAPPY",
+        "TIRED",
+        "ANGRY",
+        "SURPRISED",
+        "LEFT_HAPPY_RIGHT_ANGRY",
+        "CENTER",
+        "UP",
+        "UP_RIGHT",
+        "RIGHT",
+        "DOWN_RIGHT",
+        "DOWN",
+        "DOWN_LEFT",
+        "LEFT",
+        "UP_LEFT",
+        "BLINK_BOTH",
+        "WINK_LEFT",
+        "WINK_RIGHT",
+        "CLOSE_LEFT",
+        "OPEN_LEFT",
+        "CLOSE_RIGHT",
+        "OPEN_RIGHT",
+        "CLOSE_BOTH",
+        "OPEN_BOTH",
+        "AUTO_IDLE_GAZE"
+    };
+
+    return step < EYE_DEMO_STEP_COUNT
+        ? names[step]
+        : "UNKNOWN";
+}
+
+
+// Apply one eye-demo command from the OLED task.
+// All EmotionRenderer calls remain in the OLED task.
+void applyEyeDemoStep(uint8_t step)
+{
+    using EmotionRenderer::Eye;
+    using EmotionRenderer::GazeDirection;
+    using EmotionRenderer::Mood;
+
+    // Steps 18-23 form consecutive close/open tests.
+    // Preserve the previous eye state during the opening steps.
+    const bool openingClosingTest =
+        step >= 18 && step <= 23;
+
+    const bool startNewOpeningClosingTest =
+        step == 18 ||
+        step == 20 ||
+        step == 22;
+
+    // Restore a predictable starting state for other tests.
+    if (!openingClosingTest ||
+        startNewOpeningClosingTest)
+    {
+        EmotionRenderer::setIdleGaze(false);
+
+        EmotionRenderer::setMood(Mood::NEUTRAL);
+
+        EmotionRenderer::setEyeOpen(
+            Eye::BOTH,
+            true
+        );
+
+        EmotionRenderer::setGaze(
+            GazeDirection::CENTER
+        );
+    }
+
+    switch (step)
+    {
+        case 0:
+            // Neutral rounded-square eyes.
+            break;
+
+        case 1:
+            // Both eyes happy.
+            EmotionRenderer::setMood(Mood::HAPPY);
+            break;
+
+        case 2:
+            // Both eyes tired.
+            EmotionRenderer::setMood(Mood::TIRED);
+            break;
+
+        case 3:
+            // Both eyes angry.
+            EmotionRenderer::setMood(Mood::ANGRY);
+            break;
+
+        case 4:
+            // Both eyes surprised.
+            EmotionRenderer::setMood(Mood::SURPRISED);
+            break;
+
+        case 5:
+            // Independent left and right expressions.
+            EmotionRenderer::setEyeMood(
+                Eye::LEFT,
+                Mood::HAPPY
+            );
+
+            EmotionRenderer::setEyeMood(
+                Eye::RIGHT,
+                Mood::ANGRY
+            );
+            break;
+
+        // ----------------------------------------------------
+        // NINE GAZE DIRECTIONS
+        // ----------------------------------------------------
+
+        case 6:
+            EmotionRenderer::setGaze(GazeDirection::CENTER);
+            break;
+
+        case 7:
+            EmotionRenderer::setGaze(GazeDirection::UP);
+            break;
+
+        case 8:
+            EmotionRenderer::setGaze(GazeDirection::UP_RIGHT);
+            break;
+
+        case 9:
+            EmotionRenderer::setGaze(GazeDirection::RIGHT);
+            break;
+
+        case 10:
+            EmotionRenderer::setGaze(GazeDirection::DOWN_RIGHT);
+            break;
+
+        case 11:
+            EmotionRenderer::setGaze(GazeDirection::DOWN);
+            break;
+
+        case 12:
+            EmotionRenderer::setGaze(GazeDirection::DOWN_LEFT);
+            break;
+
+        case 13:
+            EmotionRenderer::setGaze(GazeDirection::LEFT);
+            break;
+
+        case 14:
+            EmotionRenderer::setGaze(GazeDirection::UP_LEFT);
+            break;
+
+        // ----------------------------------------------------
+        // BLINKING AND WINKING
+        // ----------------------------------------------------
+
+        case 15:
+            EmotionRenderer::blink(Eye::BOTH);
+            break;
+
+        case 16:
+            EmotionRenderer::wink(Eye::LEFT);
+            break;
+
+        case 17:
+            EmotionRenderer::wink(Eye::RIGHT);
+            break;
+
+        // ----------------------------------------------------
+        // INDEPENDENT EYE OPENING / CLOSING
+        // ----------------------------------------------------
+
+        case 18:
+            EmotionRenderer::setEyeOpen(
+                Eye::LEFT,
+                false
+            );
+            break;
+
+        case 19:
+            EmotionRenderer::setEyeOpen(
+                Eye::LEFT,
+                true
+            );
+            break;
+
+        case 20:
+            EmotionRenderer::setEyeOpen(
+                Eye::RIGHT,
+                false
+            );
+            break;
+
+        case 21:
+            EmotionRenderer::setEyeOpen(
+                Eye::RIGHT,
+                true
+            );
+            break;
+
+        case 22:
+            EmotionRenderer::setEyeOpen(
+                Eye::BOTH,
+                false
+            );
+            break;
+
+        case 23:
+            EmotionRenderer::setEyeOpen(
+                Eye::BOTH,
+                true
+            );
+            break;
+
+        // ----------------------------------------------------
+        // AUTOMATIC BEHAVIOUR
+        // ----------------------------------------------------
+
+        case 24:
+            EmotionRenderer::setIdleGaze(true);
+            break;
+
+        default:
+            break;
+    }
+
+    Serial.printf(
+        "[EYES TEST] Step %u/%u: %s\n",
+        static_cast<unsigned int>(step + 1),
+        static_cast<unsigned int>(EYE_DEMO_STEP_COUNT),
+        getEyeDemoStepName(step)
+    );
+}
+
 
 // ============================================================
 // PAGE 0 — ROBOT
 // ============================================================
 
-
-void drawRobotPage()
+void drawRobotPage(const Status &status)
 {
     static bool started = false;
-    static uint8_t testStep = 0;
-    static uint32_t lastStepMs = 0;
+    static bool demoWasActive = false;
 
-    constexpr uint32_t TEST_STEP_MS = 1800;
+    static uint8_t previousDemoStep = 0xFF;
+    static uint32_t previousDemoSession = 0;
 
     const uint32_t now = millis();
 
     if (!started)
     {
-        started = true;
-        lastStepMs = now;
-
         EmotionRenderer::reset();
+        started = true;
     }
 
-    if ((uint32_t)(now - lastStepMs) >= TEST_STEP_MS)
+    if (status.eyeDemoActive)
     {
-        testStep = (testStep + 1) % 7;
-        lastStepMs = now;
-
-        switch (testStep)
+        // Execute a test only when the step or demo session changes.
+        if (!demoWasActive ||
+            previousDemoStep != status.eyeDemoStep ||
+            previousDemoSession != status.eyeDemoSession)
         {
-            case 0:
-                // Restore both eyes.
-                EmotionRenderer::setMood(
-                    EmotionRenderer::Mood::NEUTRAL
-                );
+            applyEyeDemoStep(status.eyeDemoStep);
 
-                EmotionRenderer::setEyeOpen(
-                    EmotionRenderer::Eye::BOTH,
-                    true
-                );
-                break;
-
-            case 1:
-                // Close only the left eye.
-                EmotionRenderer::setEyeOpen(
-                    EmotionRenderer::Eye::LEFT,
-                    false
-                );
-                break;
-
-            case 2:
-                // Open left, close right.
-                EmotionRenderer::setEyeOpen(
-                    EmotionRenderer::Eye::LEFT,
-                    true
-                );
-
-                EmotionRenderer::setEyeOpen(
-                    EmotionRenderer::Eye::RIGHT,
-                    false
-                );
-                break;
-
-            case 3:
-                // Wink with the left eye.
-                EmotionRenderer::setEyeOpen(
-                    EmotionRenderer::Eye::RIGHT,
-                    true
-                );
-
-                EmotionRenderer::wink(
-                    EmotionRenderer::Eye::LEFT
-                );
-                break;
-
-            case 4:
-                // Wink with the right eye.
-                EmotionRenderer::wink(
-                    EmotionRenderer::Eye::RIGHT
-                );
-                break;
-
-            case 5:
-                // Different expressions on each eye.
-                EmotionRenderer::setEyeMood(
-                    EmotionRenderer::Eye::LEFT,
-                    EmotionRenderer::Mood::HAPPY
-                );
-
-                EmotionRenderer::setEyeMood(
-                    EmotionRenderer::Eye::RIGHT,
-                    EmotionRenderer::Mood::ANGRY
-                );
-                break;
-
-            case 6:
-                // Return to normal expression.
-                EmotionRenderer::setMood(
-                    EmotionRenderer::Mood::NEUTRAL
-                );
-
-                EmotionRenderer::setEyeOpen(
-                    EmotionRenderer::Eye::BOTH,
-                    true
-                );
-                break;
+            demoWasActive = true;
+            previousDemoStep = status.eyeDemoStep;
+            previousDemoSession = status.eyeDemoSession;
         }
+    }
+    else if (demoWasActive)
+    {
+        // Leaving the test restores normal automatic eye behaviour.
+        EmotionRenderer::reset();
 
-        Serial.printf(
-            "[EYES TEST] Independent eye step: %u\n",
-            testStep
+        demoWasActive = false;
+        previousDemoStep = 0xFF;
+
+        Serial.println(
+            "[EYES TEST] Automatic eye behaviour restored"
         );
     }
 
@@ -1228,6 +1400,81 @@ void setAnimationMode(const char *modeName)
 }
 
 // ------------------------------------------------------------
+// EYE DEMO BUTTON CONTROL
+// ------------------------------------------------------------
+
+bool nextEyeDemoStep()
+{
+    if (!displayReady || statusMutex == nullptr)
+    {
+        return false;
+    }
+
+    if (xSemaphoreTake(
+            statusMutex,
+            pdMS_TO_TICKS(20)) != pdTRUE)
+    {
+        return false;
+    }
+
+    // The first short press starts a new demo session.
+    if (!currentStatus.eyeDemoActive)
+    {
+        currentStatus.eyeDemoActive = true;
+        currentStatus.eyeDemoStep = 0;
+
+        ++currentStatus.eyeDemoSession;
+    }
+    else
+    {
+        currentStatus.eyeDemoStep =
+            (currentStatus.eyeDemoStep + 1) %
+            EYE_DEMO_STEP_COUNT;
+    }
+
+    // Always show the Robot page during the demo.
+    currentStatus.page = 0;
+
+    xSemaphoreGive(statusMutex);
+
+    notifyDisplayUpdate();
+
+    return true;
+}
+
+
+bool exitEyeDemo()
+{
+    if (!displayReady || statusMutex == nullptr)
+    {
+        return false;
+    }
+
+    if (xSemaphoreTake(
+            statusMutex,
+            pdMS_TO_TICKS(20)) != pdTRUE)
+    {
+        return false;
+    }
+
+    if (!currentStatus.eyeDemoActive)
+    {
+        xSemaphoreGive(statusMutex);
+        return false;
+    }
+
+    currentStatus.eyeDemoActive = false;
+    currentStatus.eyeDemoStep = 0;
+    currentStatus.page = 0;
+
+    xSemaphoreGive(statusMutex);
+
+    notifyDisplayUpdate();
+
+    return true;
+}
+
+// ------------------------------------------------------------
 // OLED PAGE NAVIGATION
 // ------------------------------------------------------------
 
@@ -1246,6 +1493,10 @@ bool nextPage()
     // Advance to the next page and wrap back to Home.
     currentStatus.page =
         (currentStatus.page + 1) % OLED_PAGE_COUNT;
+
+    // Stop the eye demo when navigating to another OLED page.
+    currentStatus.eyeDemoActive = false;
+    currentStatus.eyeDemoStep = 0;
 
     xSemaphoreGive(statusMutex);
 
@@ -1425,7 +1676,7 @@ void update(const Status &status)
 
         case 0:
         {
-            drawRobotPage();
+            drawRobotPage(status);
             break;
         }
 
@@ -1486,7 +1737,7 @@ void update(const Status &status)
 
         default:
         {
-            drawRobotPage();
+            drawRobotPage(status);
             break;
         }
     }

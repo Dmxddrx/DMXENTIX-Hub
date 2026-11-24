@@ -178,6 +178,8 @@ GazeDirection requestedGaze = GazeDirection::CENTER;
 // Automatic idle gaze is enabled by default.
 bool idleGazeEnabled = true;
 
+// Automatic blinking is enabled by default.
+bool automaticBlinkEnabled = true;
 
 // ------------------------------------------------------------
 // GAZE DIRECTION COORDINATES
@@ -385,6 +387,11 @@ float updateBlink(
 
 void updateAutomaticBlink(uint32_t nowMs)
 {
+    if (!automaticBlinkEnabled)
+    {
+        return;
+    }
+
     if (!timeReached(nowMs, state.nextBlinkMs))
     {
         return;
@@ -993,6 +1000,15 @@ void setIdleGaze(bool enabled)
 }
 
 // ------------------------------------------------------------
+// AUTOMATIC BLINK CONTROL
+// ------------------------------------------------------------
+
+void setAutomaticBlink(bool enabled)
+{
+    automaticBlinkEnabled = enabled;
+}
+
+// ------------------------------------------------------------
 // INDEPENDENT EYE OPEN / CLOSE
 // ------------------------------------------------------------
 
@@ -1114,6 +1130,8 @@ void reset()
     requestedGaze = GazeDirection::CENTER;
 
     idleGazeEnabled = true;
+
+    automaticBlinkEnabled = true;
 }
 
 } // namespace EmotionRenderer
