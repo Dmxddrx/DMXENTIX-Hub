@@ -3,6 +3,7 @@
 
 #include "pin_config.h"
 #include "animation_manager.h"
+#include "display_manager.h"
 
 #include <Arduino.h>
 
@@ -24,6 +25,9 @@ constexpr uint32_t BUTTON_POLL_INTERVAL_MS = 10;
 
 // Required stable time before accepting a state change.
 constexpr uint32_t BUTTON_DEBOUNCE_MS = 35;
+
+// Long press threshold for OLED page navigation.
+constexpr uint32_t BUTTON_LONG_PRESS_MS = 800;
 
 // ------------------------------------------------------------
 // INTERNAL STATE
@@ -142,23 +146,31 @@ void toggleAnimation()
  *     HIGH = Released.
  *     LOW  = Pressed.
  *
+ * Button actions:
+ *
+ *     SHORT PRESS:
+ *         Advance MAX7219 animation.
+ *
+ *     LONG PRESS:
+ *         Advance OLED page.
+ *
+ * The action is selected when the button is released,
+ * after the press duration has been determined.
+ *
  * Software debouncing:
  *
- * 1. Read the physical button state.
- * 2. Detect a raw state change.
- * 3. Wait until the state remains unchanged for
- *    BUTTON_DEBOUNCE_MS.
- * 4. Accept the new stable state.
- * 5. Toggle animation only on a stable press.
+ *     BUTTON_DEBOUNCE_MS
  *
- * Holding the button does not repeatedly change animations.
+ * Long press threshold:
+ *
+ *     BUTTON_LONG_PRESS_MS
  */
 void buttonTask(void *parameter)
 {
     (void)parameter;
 
-    // Read the initial state to prevent an unwanted
-    // animation change if the button is held during startup.
+    // Read initial state to avoid unwanted actions
+    // if the button is held during startup.
     bool lastRawPressed =
         (digitalRead(PinConfig::BUTTON_ANIMATION) == LOW);
 
@@ -166,12 +178,17 @@ void buttonTask(void *parameter)
 
     uint32_t lastRawChangeMs = millis();
 
+    // Press timing becomes active only after a
+    // newly detected and debounced press.
+    bool pressTimingActive = false;
+
+    uint32_t pressStartedMs = 0;
+
     TickType_t lastWakeTime = xTaskGetTickCount();
 
     TickType_t pollInterval =
         pdMS_TO_TICKS(BUTTON_POLL_INTERVAL_MS);
 
-    // Ensure a valid FreeRTOS interval.
     if (pollInterval == 0) {
         pollInterval = 1;
     }
@@ -183,14 +200,14 @@ void buttonTask(void *parameter)
 
         const uint32_t nowMs = millis();
 
-        // Detect a raw electrical state change.
+        // Detect raw electrical state changes.
         if (rawPressed != lastRawPressed)
         {
             lastRawPressed = rawPressed;
             lastRawChangeMs = nowMs;
         }
 
-        // Accept the new state only after it remains stable.
+        // Accept a state change after the debounce interval.
         if ((uint32_t)(nowMs - lastRawChangeMs) >=
             BUTTON_DEBOUNCE_MS)
         {
@@ -198,16 +215,60 @@ void buttonTask(void *parameter)
             {
                 stablePressed = lastRawPressed;
 
-                // Only a stable LOW transition counts as a press.
+                // --------------------------------------------
+                // BUTTON PRESSED
+                // --------------------------------------------
+
                 if (stablePressed)
                 {
-                    toggleAnimation();
+                    pressStartedMs = lastRawChangeMs;
+                    pressTimingActive = true;
+                }
+
+                // --------------------------------------------
+                // BUTTON RELEASED
+                // --------------------------------------------
+
+                else if (pressTimingActive)
+                {
+                    // Measure physical press duration.
+                    const uint32_t pressDurationMs =
+                        lastRawChangeMs - pressStartedMs;
+
+                    pressTimingActive = false;
+
+                    // ----------------------------------------
+                    // LONG PRESS: CHANGE OLED PAGE
+                    // ----------------------------------------
+
+                    if (pressDurationMs >= BUTTON_LONG_PRESS_MS)
+                    {
+                        if (DisplayManager::isReady() &&
+                            DisplayManager::nextPage())
+                        {
+                            Serial.println(
+                                "[BUTTON] OLED page changed"
+                            );
+                        }
+                    }
+
+                    // ----------------------------------------
+                    // SHORT PRESS: CHANGE MATRIX ANIMATION
+                    // ----------------------------------------
+
+                    else
+                    {
+                        toggleAnimation();
+                    }
                 }
             }
         }
 
-        // Schedule the next button sample without busy polling.
-        vTaskDelayUntil(&lastWakeTime, pollInterval);
+        // Schedule the next sample.
+        vTaskDelayUntil(
+            &lastWakeTime,
+            pollInterval
+        );
     }
 }
 

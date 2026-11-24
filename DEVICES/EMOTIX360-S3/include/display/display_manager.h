@@ -59,6 +59,9 @@ void setApplicationStatus(
     const char *modeName
 );
 
+// Move to the next OLED page.
+bool nextPage();
+
 void requestUpdate();
 
 void showStartupMessage(const char *message);

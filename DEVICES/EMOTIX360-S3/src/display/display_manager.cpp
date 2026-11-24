@@ -28,6 +28,7 @@ SemaphoreHandle_t logMutex = nullptr;
 constexpr int DISPLAY_NATIVE_WIDTH = 128;
 constexpr int DISPLAY_NATIVE_HEIGHT = 64;
 constexpr int OLED_RESET = -1;
+constexpr uint8_t OLED_PAGE_COUNT = 4;
 
 constexpr uint8_t LOG_QUEUE_SIZE = 8;
 constexpr size_t LOG_LINE_SIZE = 22;
@@ -1204,6 +1205,32 @@ void setApplicationStatus(
     notifyDisplayUpdate();
 }
 
+// ------------------------------------------------------------
+// OLED PAGE NAVIGATION
+// ------------------------------------------------------------
+
+bool nextPage()
+{
+    if (statusMutex == nullptr) {
+        return false;
+    }
+
+    if (xSemaphoreTake(
+            statusMutex,
+            pdMS_TO_TICKS(20)) != pdTRUE) {
+        return false;
+    }
+
+    // Advance to the next page and wrap back to Home.
+    currentStatus.page =
+        (currentStatus.page + 1) % OLED_PAGE_COUNT;
+
+    xSemaphoreGive(statusMutex);
+
+    notifyDisplayUpdate();
+
+    return true;
+}
 
 // ------------------------------------------------------------
 // REQUEST DISPLAY REFRESH
