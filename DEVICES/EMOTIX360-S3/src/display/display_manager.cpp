@@ -28,7 +28,7 @@ constexpr int DISPLAY_NATIVE_HEIGHT = 64;
 constexpr int OLED_RESET = -1;
 constexpr uint8_t OLED_PAGE_COUNT = 4;
 // Number of manually selectable eye behaviour tests.
-constexpr uint8_t EYE_DEMO_STEP_COUNT = 38;
+constexpr uint8_t EYE_DEMO_STEP_COUNT = 47;
 
 
 Adafruit_SSD1306 display(
@@ -457,7 +457,7 @@ const char *getEyeDemoStepName(uint8_t step)
         // EYE GEOMETRY TESTS
         // --------------------------------------------------------
 
-        "DEFAULT_GEOMETRY",          // 26
+        "DEFAULT_GEOMETRY",           // 26
         "WIDE_EYES",                  // 27
         "NARROW_EYES",                // 28
         "TALL_EYES",                  // 29
@@ -468,7 +468,16 @@ const char *getEyeDemoStepName(uint8_t step)
         "LARGE_RADIUS",               // 34
         "INDEPENDENT_GEOMETRY",       // 35
         "CYCLOPS",                    // 36
-        "RESTORE_EYE_PAIR"            // 37
+        "RESTORE_EYE_PAIR",           // 37
+        "CURIOSITY_LOOK_LEFT",        // 38
+        "CURIOSITY_LOOK_RIGHT",       // 39
+        "CURIOSITY_DISABLED",         // 40
+        "FLICKER_HORIZONTAL",         // 41
+        "FLICKER_VERTICAL",           // 42
+        "CONFUSED",                   // 43
+        "LAUGH",                      // 44
+        "SHAKE_HORIZONTAL",           // 45
+        "SHAKE_VERTICAL"              // 46
     };
 
     return step < EYE_DEMO_STEP_COUNT
@@ -485,10 +494,21 @@ void applyEyeDemoStep(uint8_t step)
     using EmotionRenderer::GazeDirection;
     using EmotionRenderer::Mood;
     using EmotionRenderer::GeometryPreset;
+    using EmotionRenderer::OneShotAnimation;
+
+    // Cancel a previous one-shot before starting the next test.
+    EmotionRenderer::playOneShot(
+        OneShotAnimation::NONE
+    );
 
     // Automatic blinking is reserved for the automatic
     // behaviour test. Manual blink and wink commands still work.
     EmotionRenderer::setAutomaticBlink(step == 25);
+
+    // Curiosity is used only during its dedicated tests.
+    EmotionRenderer::setCuriosity(
+        step == 38 || step == 39
+    );
 
     // Every test starts with predictable default geometry.
     // Geometry presets below override this when necessary.
@@ -793,6 +813,79 @@ void applyEyeDemoStep(uint8_t step)
             // Restore the original two-eye arrangement.
             EmotionRenderer::setGeometryPreset(
                 GeometryPreset::RESTORE_EYE_PAIR
+            );
+            break;
+
+        // ----------------------------------------------------
+        // CURIOSITY TESTS
+        // ----------------------------------------------------
+
+        case 38:
+            // Look left and enlarge the left eye.
+            EmotionRenderer::setGaze(
+                GazeDirection::LEFT
+            );
+            break;
+
+        case 39:
+            // Look right and enlarge the right eye.
+            EmotionRenderer::setGaze(
+                GazeDirection::RIGHT
+            );
+            break;
+
+        case 40:
+            // Disable curiosity and restore normal eye size.
+            EmotionRenderer::setCuriosity(false);
+
+            EmotionRenderer::setGaze(
+                GazeDirection::CENTER
+            );
+            break;
+
+        // ----------------------------------------------------
+        // ONE-SHOT EYE ANIMATIONS
+        // ----------------------------------------------------
+
+        case 41:
+            // Rapid horizontal eye compression.
+            EmotionRenderer::playOneShot(
+                OneShotAnimation::FLICKER_HORIZONTAL
+            );
+            break;
+
+        case 42:
+            // Rapid vertical eye compression.
+            EmotionRenderer::playOneShot(
+                OneShotAnimation::FLICKER_VERTICAL
+            );
+            break;
+
+        case 43:
+            // Confused side-to-side eye movement.
+            EmotionRenderer::playOneShot(
+                OneShotAnimation::CONFUSED
+            );
+            break;
+
+        case 44:
+            // Repeated happy-eye squash animation.
+            EmotionRenderer::playOneShot(
+                OneShotAnimation::LAUGH
+            );
+            break;
+
+        case 45:
+            // Horizontal shaking.
+            EmotionRenderer::playOneShot(
+                OneShotAnimation::SHAKE_HORIZONTAL
+            );
+            break;
+
+        case 46:
+            // Vertical shaking.
+            EmotionRenderer::playOneShot(
+                OneShotAnimation::SHAKE_VERTICAL
             );
             break;
 

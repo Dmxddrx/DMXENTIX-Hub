@@ -58,6 +58,18 @@ enum class GeometryPreset : uint8_t
     RESTORE_EYE_PAIR
 };
 
+// Available one-shot eye animations.
+enum class OneShotAnimation : uint8_t
+{
+    NONE,
+    FLICKER_HORIZONTAL,
+    FLICKER_VERTICAL,
+    CONFUSED,
+    LAUGH,
+    SHAKE_HORIZONTAL,
+    SHAKE_VERTICAL
+};
+
 // Draw and update the robot eyes.
 //
 // Landscape: animated face.
@@ -113,8 +125,14 @@ void setEyeMood(Eye eye, Mood mood);
 // Geometry changes are smoothly interpolated.
 void setGeometryPreset(GeometryPreset preset);
 
+// Enable or disable curiosity-driven eye enlargement.
+void setCuriosity(bool enabled);
+
 // Enable or disable automatic periodic blinking.
 void setAutomaticBlink(bool enabled);
+
+// Play a non-blocking one-shot eye animation.
+void playOneShot(OneShotAnimation animation);
 
 // Reset animation state.
 void reset();

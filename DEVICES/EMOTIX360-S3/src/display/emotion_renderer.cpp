@@ -33,6 +33,15 @@ constexpr uint32_t MAX_BLINK_INTERVAL_MS = 4800;
 constexpr uint32_t MIN_GAZE_INTERVAL_MS = 2000;
 constexpr uint32_t MAX_GAZE_INTERVAL_MS = 4500;
 
+// One-shot animation durations.
+constexpr uint32_t FLICKER_DURATION_MS = 520;
+constexpr uint32_t CONFUSED_DURATION_MS = 1200;
+constexpr uint32_t LAUGH_DURATION_MS = 1200;
+constexpr uint32_t SHAKE_DURATION_MS = 700;
+
+constexpr float ANIMATION_PI = 3.14159265f;
+constexpr float ANIMATION_TWO_PI = 6.28318530f;
+
 
 // ------------------------------------------------------------
 // EYE MOOD GEOMETRY
@@ -154,8 +163,25 @@ struct AnimationState
     float cornerRadiusScale = 1.0f;
     float targetCornerRadiusScale = 1.0f;
 
-    // Display a single centred eye.
-    bool cyclopsMode = false;
+    // Smooth transition between a normal eye pair and Cyclops.
+    float cyclopsBlend = 0.0f;
+    float targetCyclopsBlend = 0.0f;
+
+    // --------------------------------------------------------
+    // ONE-SHOT ANIMATION STATE
+    // --------------------------------------------------------
+
+    OneShotAnimation activeOneShot = OneShotAnimation::NONE;
+
+    uint32_t oneShotStartMs = 0;
+    uint32_t oneShotDurationMs = 0;
+
+    // Smooth curiosity scaling for each eye.
+    float leftCuriosityScale = 1.0f;
+    float targetLeftCuriosityScale = 1.0f;
+
+    float rightCuriosityScale = 1.0f;
+    float targetRightCuriosityScale = 1.0f;
 
     // Independent eyes.
     EyeAnimationState leftEye{};
@@ -198,6 +224,9 @@ bool idleGazeEnabled = true;
 
 // Automatic blinking is enabled by default.
 bool automaticBlinkEnabled = true;
+
+// Curiosity is disabled by default.
+bool curiosityEnabled = false;
 
 // ------------------------------------------------------------
 // REQUESTED EYE GEOMETRY
@@ -298,7 +327,186 @@ float interpolate(
 {
     return current + (target - current) * amount;
 }
+// ------------------------------------------------------------
+// ONE-SHOT ANIMATION FRAME
+// ------------------------------------------------------------
 
+struct OneShotFrame
+{
+    float scaleX = 1.0f;
+    float scaleY = 1.0f;
+
+    float offsetX = 0.0f;
+    float offsetY = 0.0f;
+
+    bool useHappyMood = false;
+};
+
+
+// ------------------------------------------------------------
+// UPDATE ONE-SHOT ANIMATION
+// ------------------------------------------------------------
+
+OneShotFrame updateOneShotAnimation(uint32_t nowMs)
+{
+    OneShotFrame frame{};
+
+    if (state.activeOneShot == OneShotAnimation::NONE ||
+        state.oneShotDurationMs == 0)
+    {
+        return frame;
+    }
+
+    const uint32_t elapsed =
+        nowMs - state.oneShotStartMs;
+
+    // One-shot animation has finished.
+    if (elapsed >= state.oneShotDurationMs)
+    {
+        state.activeOneShot = OneShotAnimation::NONE;
+        state.oneShotDurationMs = 0;
+
+        return frame;
+    }
+
+    const float progress =
+        static_cast<float>(elapsed) /
+        static_cast<float>(state.oneShotDurationMs);
+
+    // Smooth envelope: starts and finishes at zero.
+    const float envelope =
+        sinf(progress * ANIMATION_PI);
+
+    switch (state.activeOneShot)
+    {
+        // ----------------------------------------------------
+        // HORIZONTAL FLICKER
+        // ----------------------------------------------------
+
+        case OneShotAnimation::FLICKER_HORIZONTAL:
+        {
+            const float phase =
+                static_cast<float>(elapsed) * ANIMATION_TWO_PI / 65.0f;
+
+            const float pulse =
+                0.5f + 0.5f * sinf(phase);
+
+            frame.scaleX =
+                1.0f - (0.82f * envelope * pulse);
+
+            break;
+        }
+
+        // ----------------------------------------------------
+        // VERTICAL FLICKER
+        // ----------------------------------------------------
+
+        case OneShotAnimation::FLICKER_VERTICAL:
+        {
+            const float phase =
+                static_cast<float>(elapsed) * ANIMATION_TWO_PI / 65.0f;
+
+            const float pulse =
+                0.5f + 0.5f * sinf(phase);
+
+            frame.scaleY =
+                1.0f - (0.82f * envelope * pulse);
+
+            break;
+        }
+
+        // ----------------------------------------------------
+        // CONFUSED
+        // ----------------------------------------------------
+
+        case OneShotAnimation::CONFUSED:
+        {
+            const float phase =
+                static_cast<float>(elapsed) *
+                ANIMATION_TWO_PI / 260.0f;
+
+            // Alternate gaze direction.
+            frame.offsetX =
+                9.0f * sinf(phase) * envelope;
+
+            // Add a smaller vertical wobble.
+            frame.offsetY =
+                2.5f * sinf(phase * 0.5f) * envelope;
+
+            break;
+        }
+
+        // ----------------------------------------------------
+        // LAUGH
+        // ----------------------------------------------------
+
+        case OneShotAnimation::LAUGH:
+        {
+            const float pulse =
+                fabsf(
+                    sinf(
+                        progress * 3.0f * ANIMATION_PI
+                    )
+                );
+
+            frame.useHappyMood = true;
+
+            // Repeated vertical squashing.
+            frame.scaleY =
+                1.0f - (0.48f * envelope * pulse);
+
+            // Slight horizontal expansion.
+            frame.scaleX =
+                1.0f + (0.04f * envelope * pulse);
+
+            break;
+        }
+
+        // ----------------------------------------------------
+        // HORIZONTAL SHAKE
+        // ----------------------------------------------------
+
+        case OneShotAnimation::SHAKE_HORIZONTAL:
+        {
+            const float phase =
+                static_cast<float>(elapsed) *
+                ANIMATION_TWO_PI / 70.0f;
+
+            const float decay =
+                1.0f - progress;
+
+            frame.offsetX =
+                8.0f * sinf(phase) * decay;
+
+            break;
+        }
+
+        // ----------------------------------------------------
+        // VERTICAL SHAKE
+        // ----------------------------------------------------
+
+        case OneShotAnimation::SHAKE_VERTICAL:
+        {
+            const float phase =
+                static_cast<float>(elapsed) *
+                ANIMATION_TWO_PI / 70.0f;
+
+            const float decay =
+                1.0f - progress;
+
+            frame.offsetY =
+                6.0f * sinf(phase) * decay;
+
+            break;
+        }
+
+        case OneShotAnimation::NONE:
+        default:
+            break;
+    }
+
+    return frame;
+}
 
 // ------------------------------------------------------------
 // START ONE EYE BLINK
@@ -357,7 +565,11 @@ void initializeAnimation(uint32_t nowMs)
     state.cornerRadiusScale = requestedCornerRadiusScale;
     state.targetCornerRadiusScale = requestedCornerRadiusScale;
 
-    state.cyclopsMode = requestedCyclopsMode;
+    // Start with the normal pair and animate toward the requested layout.
+    state.cyclopsBlend = 0.0f;
+
+    state.targetCyclopsBlend =
+        requestedCyclopsMode ? 1.0f : 0.0f;
 
     // Restore independent opening states.
     state.leftEye.openness = requestedLeftOpenness;
@@ -801,45 +1013,128 @@ void drawLandscapeEyes(
         );
 
     // --------------------------------------------------------
-// UPDATE INDEPENDENT EYE GEOMETRY
-// --------------------------------------------------------
+    // UPDATE INDEPENDENT EYE GEOMETRY
+    // --------------------------------------------------------
 
-state.leftEye.geometryScaleX = interpolate(
-    state.leftEye.geometryScaleX,
-    state.leftEye.targetGeometryScaleX,
-    blend
-);
+    state.leftEye.geometryScaleX = interpolate(
+        state.leftEye.geometryScaleX,
+        state.leftEye.targetGeometryScaleX,
+        blend
+    );
 
-state.leftEye.geometryScaleY = interpolate(
-    state.leftEye.geometryScaleY,
-    state.leftEye.targetGeometryScaleY,
-    blend
-);
+    state.leftEye.geometryScaleY = interpolate(
+        state.leftEye.geometryScaleY,
+        state.leftEye.targetGeometryScaleY,
+        blend
+    );
 
-state.rightEye.geometryScaleX = interpolate(
-    state.rightEye.geometryScaleX,
-    state.rightEye.targetGeometryScaleX,
-    blend
-);
+    state.rightEye.geometryScaleX = interpolate(
+        state.rightEye.geometryScaleX,
+        state.rightEye.targetGeometryScaleX,
+        blend
+    );
 
-state.rightEye.geometryScaleY = interpolate(
-    state.rightEye.geometryScaleY,
-    state.rightEye.targetGeometryScaleY,
-    blend
-);
+    state.rightEye.geometryScaleY = interpolate(
+        state.rightEye.geometryScaleY,
+        state.rightEye.targetGeometryScaleY,
+        blend
+    );
 
-// Smooth shared geometry.
-state.eyeGap = interpolate(
-    state.eyeGap,
-    state.targetEyeGap,
-    blend
-);
+    // Smooth shared geometry.
+    state.eyeGap = interpolate(
+        state.eyeGap,
+        state.targetEyeGap,
+        blend
+    );
 
-state.cornerRadiusScale = interpolate(
-    state.cornerRadiusScale,
-    state.targetCornerRadiusScale,
-    blend
-);
+    state.cornerRadiusScale = interpolate(
+        state.cornerRadiusScale,
+        state.targetCornerRadiusScale,
+        blend
+    );
+
+    // Smoothly merge or separate the two eyes.
+    state.cyclopsBlend = interpolate(
+        state.cyclopsBlend,
+        state.targetCyclopsBlend,
+        blend
+    );
+
+    // --------------------------------------------------------
+    // UPDATE AUTOMATIC / MANUAL GAZE
+    // --------------------------------------------------------
+
+    updateIdleGaze(nowMs);
+
+    // Smooth horizontal and vertical gaze movement.
+    state.gazeX = interpolate(
+        state.gazeX,
+        state.targetGazeX,
+        blend
+    );
+
+    state.gazeY = interpolate(
+        state.gazeY,
+        state.targetGazeY,
+        blend
+    );
+
+
+    // --------------------------------------------------------
+    // UPDATE CURIOSITY
+    // --------------------------------------------------------
+
+    float targetLeftCuriosity = 1.0f;
+    float targetRightCuriosity = 1.0f;
+
+    if (curiosityEnabled)
+    {
+        // Calculate how far the eyes are looking horizontally.
+        const float normalizedGaze =
+            fabsf(state.gazeX) / MAX_GAZE_X;
+
+        // Curiosity increases gradually as horizontal gaze grows.
+        const float curiosityAmount =
+            smoothStep(
+                (normalizedGaze - 0.12f) / 0.68f
+            );
+
+        const float focusScale =
+            1.0f + (0.18f * curiosityAmount);
+
+        // Enlarge the eye on the side being inspected.
+        if (state.gazeX < -0.5f)
+        {
+            targetLeftCuriosity = focusScale;
+        }
+        else if (state.gazeX > 0.5f)
+        {
+            targetRightCuriosity = focusScale;
+        }
+    }
+
+    // Smooth enlargement and restoration.
+    state.leftCuriosityScale = interpolate(
+        state.leftCuriosityScale,
+        targetLeftCuriosity,
+        blend
+    );
+
+    state.rightCuriosityScale = interpolate(
+        state.rightCuriosityScale,
+        targetRightCuriosity,
+        blend
+    );
+    // --------------------------------------------------------
+    // UPDATE INDEPENDENT EYE EXPRESSIONS
+    // --------------------------------------------------------
+
+    // --------------------------------------------------------
+    // UPDATE ONE-SHOT ANIMATION
+    // --------------------------------------------------------
+
+    const OneShotFrame oneShot =
+        updateOneShotAnimation(nowMs);
 
 
     // --------------------------------------------------------
@@ -847,17 +1142,35 @@ state.cornerRadiusScale = interpolate(
     // --------------------------------------------------------
 
     MoodShape leftMood =
-        getMoodShape(requestedLeftMood);
+        oneShot.useHappyMood
+        ? getMoodShape(Mood::HAPPY)
+        : getMoodShape(requestedLeftMood);
 
     MoodShape rightMood =
-        getMoodShape(requestedRightMood);
+        oneShot.useHappyMood
+        ? getMoodShape(Mood::HAPPY)
+        : getMoodShape(requestedRightMood);
 
-    // Apply geometry scaling without changing mood definitions.
-    leftMood.width *= state.leftEye.geometryScaleX;
-    leftMood.height *= state.leftEye.geometryScaleY;
+    // Apply geometry, Curiosity and one-shot scaling.
+    leftMood.width *=
+        state.leftEye.geometryScaleX *
+        state.leftCuriosityScale *
+        oneShot.scaleX;
 
-    rightMood.width *= state.rightEye.geometryScaleX;
-    rightMood.height *= state.rightEye.geometryScaleY;
+    leftMood.height *=
+        state.leftEye.geometryScaleY *
+        state.leftCuriosityScale *
+        oneShot.scaleY;
+
+    rightMood.width *=
+        state.rightEye.geometryScaleX *
+        state.rightCuriosityScale *
+        oneShot.scaleX;
+
+    rightMood.height *=
+        state.rightEye.geometryScaleY *
+        state.rightCuriosityScale *
+        oneShot.scaleY;
 
     updateEyeShape(
         state.leftEye,
@@ -885,25 +1198,9 @@ state.cornerRadiusScale = interpolate(
     );
 
     // --------------------------------------------------------
-    // UPDATE AUTOMATIC BEHAVIOUR
+    // UPDATE AUTOMATIC BLINKING
     // --------------------------------------------------------
 
-    updateIdleGaze(nowMs);
-
-    // Smooth complete-eye movement.
-    state.gazeX = interpolate(
-        state.gazeX,
-        state.targetGazeX,
-        blend
-    );
-
-    state.gazeY = interpolate(
-        state.gazeY,
-        state.targetGazeY,
-        blend
-    );
-
-    // Automatic blinking still affects both eyes.
     updateAutomaticBlink(nowMs);
 
     // --------------------------------------------------------
@@ -942,37 +1239,98 @@ state.cornerRadiusScale = interpolate(
     // CALCULATE COMPLETE EYE PAIR POSITION
     // --------------------------------------------------------
 
+    const float combinedOffsetX =
+        state.gazeX + oneShot.offsetX;
+
+    const float combinedOffsetY =
+        state.gazeY + oneShot.offsetY;
+
     const int16_t eyeOffsetX =
         static_cast<int16_t>(
-            state.gazeX >= 0.0f
-            ? state.gazeX + 0.5f
-            : state.gazeX - 0.5f
+            combinedOffsetX >= 0.0f
+            ? combinedOffsetX + 0.5f
+            : combinedOffsetX - 0.5f
         );
 
     const int16_t eyeOffsetY =
         static_cast<int16_t>(
-            state.gazeY >= 0.0f
-            ? state.gazeY + 0.5f
-            : state.gazeY - 0.5f
+            combinedOffsetY >= 0.0f
+            ? combinedOffsetY + 0.5f
+            : combinedOffsetY - 0.5f
         );
 
     const int16_t eyeCenterY =
         centerY + eyeOffsetY;
 
     // --------------------------------------------------------
-    // CYCLOPS MODE
+    // SMOOTH CYCLOPS LAYOUT TRANSITION
     // --------------------------------------------------------
 
-    if (state.cyclopsMode)
+    // Centre position of the display, including horizontal gaze.
+    const float displayCenterX =
+        (static_cast<float>(canvas.width()) - 1.0f) / 2.0f
+        + eyeOffsetX;
+
+    // Normal centre positions of both eyes.
+    const float normalLeftCenterX =
+        static_cast<float>(leftX) +
+        (static_cast<float>(leftWidth) / 2.0f) +
+        eyeOffsetX;
+
+    const float normalRightCenterX =
+        static_cast<float>(rightX) +
+        (static_cast<float>(rightWidth) / 2.0f) +
+        eyeOffsetX;
+
+    // Move both eyes smoothly toward the same centre point.
+    const float animatedLeftCenterX =
+        interpolate(
+            normalLeftCenterX,
+            displayCenterX,
+            state.cyclopsBlend
+        );
+
+    const float animatedRightCenterX =
+        interpolate(
+            normalRightCenterX,
+            displayCenterX,
+            state.cyclopsBlend
+        );
+
+    // Convert eye centres back into top-left drawing positions.
+    const int16_t leftDrawX =
+        static_cast<int16_t>(
+            animatedLeftCenterX -
+            (static_cast<float>(leftWidth) / 2.0f) +
+            0.5f
+        );
+
+    const int16_t rightDrawX =
+        static_cast<int16_t>(
+            animatedRightCenterX -
+            (static_cast<float>(rightWidth) / 2.0f) +
+            0.5f
+        );
+
+    // --------------------------------------------------------
+    // FULL CYCLOPS MODE
+    // --------------------------------------------------------
+
+    // Once both eyes have practically merged, draw only the
+    // left eye. Its enlarged geometry becomes the central eye.
+    if (state.cyclopsBlend >= 0.995f)
     {
-        // Position the remaining eye in the centre of the display.
         const int16_t cyclopsX =
-            (canvas.width() - leftWidth) / 2;
+            static_cast<int16_t>(
+                displayCenterX -
+                (static_cast<float>(leftWidth) / 2.0f) +
+                0.5f
+            );
 
         drawSingleEye(
             canvas,
             state.leftEye,
-            cyclopsX + eyeOffsetX,
+            cyclopsX,
             eyeCenterY,
             state.cornerRadiusScale,
             leftMood,
@@ -982,6 +1340,36 @@ state.cornerRadiusScale = interpolate(
 
         return;
     }
+
+    // --------------------------------------------------------
+    // DRAW LEFT EYE
+    // --------------------------------------------------------
+
+    drawSingleEye(
+        canvas,
+        state.leftEye,
+        leftDrawX,
+        eyeCenterY,
+        state.cornerRadiusScale,
+        leftMood,
+        false,
+        nowMs
+    );
+
+    // --------------------------------------------------------
+    // DRAW RIGHT EYE
+    // --------------------------------------------------------
+
+    drawSingleEye(
+        canvas,
+        state.rightEye,
+        rightDrawX,
+        eyeCenterY,
+        state.cornerRadiusScale,
+        rightMood,
+        true,
+        nowMs
+    );
 
     // --------------------------------------------------------
     // DRAW LEFT EYE
@@ -1373,8 +1761,8 @@ void setGeometryPreset(GeometryPreset preset)
             leftScaleX = 1.25f;
             leftScaleY = 1.12f;
 
-            eyeGap = 0.0f;
-
+            // Keep the normal spacing as the eyes move
+            // toward the centre of the display.
             cyclopsMode = true;
 
             break;
@@ -1413,8 +1801,76 @@ void setGeometryPreset(GeometryPreset preset)
         state.targetCornerRadiusScale =
             cornerRadiusScale;
 
-        // Switching between one eye and two eyes is a layout change.
-        state.cyclopsMode = cyclopsMode;
+        // Animate between the normal pair and Cyclops.
+        state.targetCyclopsBlend =
+            cyclopsMode ? 1.0f : 0.0f;
+    }
+}
+
+// ------------------------------------------------------------
+// CURIOSITY CONTROL
+// ------------------------------------------------------------
+
+void setCuriosity(bool enabled)
+{
+    curiosityEnabled = enabled;
+}
+
+// ------------------------------------------------------------
+// PLAY ONE-SHOT EYE ANIMATION
+// ------------------------------------------------------------
+
+void playOneShot(OneShotAnimation animation)
+{
+    // Cancel any currently running one-shot animation.
+    if (animation == OneShotAnimation::NONE)
+    {
+        state.activeOneShot = OneShotAnimation::NONE;
+        state.oneShotDurationMs = 0;
+        return;
+    }
+
+    const uint32_t nowMs = millis();
+
+    // Initialise animation state if the renderer has not
+    // drawn its first frame yet.
+    if (!state.initialized)
+    {
+        initializeAnimation(nowMs);
+    }
+
+    state.activeOneShot = animation;
+    state.oneShotStartMs = nowMs;
+
+    switch (animation)
+    {
+        case OneShotAnimation::FLICKER_HORIZONTAL:
+        case OneShotAnimation::FLICKER_VERTICAL:
+            state.oneShotDurationMs =
+                FLICKER_DURATION_MS;
+            break;
+
+        case OneShotAnimation::CONFUSED:
+            state.oneShotDurationMs =
+                CONFUSED_DURATION_MS;
+            break;
+
+        case OneShotAnimation::LAUGH:
+            state.oneShotDurationMs =
+                LAUGH_DURATION_MS;
+            break;
+
+        case OneShotAnimation::SHAKE_HORIZONTAL:
+        case OneShotAnimation::SHAKE_VERTICAL:
+            state.oneShotDurationMs =
+                SHAKE_DURATION_MS;
+            break;
+
+        case OneShotAnimation::NONE:
+        default:
+            state.oneShotDurationMs = 0;
+            state.activeOneShot = OneShotAnimation::NONE;
+            break;
     }
 }
 
@@ -1455,6 +1911,9 @@ void reset()
     requestedCornerRadiusScale = 1.0f;
 
     requestedCyclopsMode = false;
+
+    // Curiosity returns to its normal disabled state.
+    curiosityEnabled = false;
 }
 
 } // namespace EmotionRenderer
