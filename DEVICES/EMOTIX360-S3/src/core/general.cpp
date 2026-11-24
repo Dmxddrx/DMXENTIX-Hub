@@ -11,6 +11,9 @@
 #include "bluetooth_manager.h"
 #include "buzzer.h"
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
 #include <Arduino.h>
 
 namespace General {
@@ -24,6 +27,69 @@ void printSerialDiagnosticHeader()
 {
     Serial.println();
     Serial.println("          EMOTIX360 DIAGNOSTICS");
+}
+// ------------------------------------------------------------
+// OLED CLOCK STATUS TASK
+// ------------------------------------------------------------
+
+constexpr uint32_t CLOCK_STATUS_TASK_STACK_SIZE = 4096;
+constexpr UBaseType_t CLOCK_STATUS_TASK_PRIORITY = 1;
+
+TaskHandle_t clockStatusTaskHandle = nullptr;
+
+
+void clockStatusTask(void *parameter)
+{
+    (void)parameter;
+
+    for (;;)
+    {
+        struct tm localTime{};
+
+        // Get the current local time from the WiFi/NTP manager.
+        const bool timeValid =
+            WifiManager::getLocalTime(localTime);
+
+        // Publish the latest time to the OLED display manager.
+        if (DisplayManager::isReady())
+        {
+            DisplayManager::setClockStatus(
+                localTime,
+                timeValid
+            );
+        }
+
+        // Update the clock once per second.
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+
+bool startClockStatusTask()
+{
+    if (!DeviceConfig::OLED_ENABLED ||
+        !DisplayManager::isReady() ||
+        clockStatusTaskHandle != nullptr)
+    {
+        return false;
+    }
+
+    const BaseType_t result = xTaskCreate(
+        clockStatusTask,
+        "ClockStatus",
+        CLOCK_STATUS_TASK_STACK_SIZE,
+        nullptr,
+        CLOCK_STATUS_TASK_PRIORITY,
+        &clockStatusTaskHandle
+    );
+
+    if (result != pdPASS)
+    {
+        clockStatusTaskHandle = nullptr;
+        return false;
+    }
+
+    return true;
 }
 
 } // namespace
@@ -232,6 +298,20 @@ bool begin()
         (DeviceConfig::OLED_ENABLED ? "FAILED" : "DISABLED")
     );
 
+    // Start the periodic OLED clock status publisher.
+    bool clockStatusTaskStarted = false;
+
+    if (oledTaskStarted)
+    {
+        clockStatusTaskStarted = startClockStatusTask();
+    }
+
+    Serial.printf(
+        "[GENERAL] Clock status task: %s\n",
+        clockStatusTaskStarted ? "STARTED" :
+        (DeviceConfig::OLED_ENABLED ? "FAILED" : "DISABLED")
+    );
+
 
     // --------------------------------------------------------
     // SERIAL DIAGNOSTICS
@@ -244,12 +324,12 @@ bool begin()
 
     printSerialDiagnosticHeader();
 
-    // INITIALIZATION RESULT
+    // OLED is an optional supporting display.
+    // Its failure must not prevent the core device from operating.
     return mpuTaskStarted &&
-       matrixReady &&
-       animationReady &&
-       buttonTaskStarted &&
-       (!DeviceConfig::OLED_ENABLED || oledTaskStarted);
+        matrixReady &&
+        animationReady &&
+        buttonTaskStarted;
 }
 
 } // namespace General
