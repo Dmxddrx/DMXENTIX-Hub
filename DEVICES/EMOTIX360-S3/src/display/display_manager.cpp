@@ -5,6 +5,7 @@
 #include "i2c_manager.h"
 #include "device_config.h"
 #include "emotion_renderer.h"
+#include "robot_behaviour.h"
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -968,6 +969,7 @@ void drawRobotPage(const Status &status)
     if (!started)
     {
         EmotionRenderer::reset();
+        RobotBehaviour::reset();
         started = true;
     }
 
@@ -989,6 +991,7 @@ void drawRobotPage(const Status &status)
     {
         // Leaving the test restores normal automatic eye behaviour.
         EmotionRenderer::reset();
+        RobotBehaviour::reset();
 
         demoWasActive = false;
         previousDemoStep = 0xFF;
@@ -996,6 +999,16 @@ void drawRobotPage(const Status &status)
         Serial.println(
             "[EYES TEST] Automatic eye behaviour restored"
         );
+    }
+
+    // --------------------------------------------------------
+    // AUTOMATIC MPU6050-DRIVEN ROBOT BEHAVIOUR
+    // --------------------------------------------------------
+
+    // Manual eye-demo tests always have priority.
+    if (!status.eyeDemoActive)
+    {
+        RobotBehaviour::update(now);
     }
 
     EmotionRenderer::drawRobotEyes(display, now);
