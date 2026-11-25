@@ -37,6 +37,9 @@ constexpr uint32_t SHAKE_VISUAL_HOLD_MS = 800;
 // Ignore sensor readings that have become too old.
 constexpr uint32_t SENSOR_STALE_MS = 300;
 
+// Prevent shake detection from replacing a matrix entry animation.
+// The longest current entry animation is the 1500 ms sweat effect.
+constexpr uint32_t MATRIX_ENTRY_EFFECT_GUARD_MS = 1600;
 
 // ------------------------------------------------------------
 // BEHAVIOUR STATES
@@ -98,6 +101,12 @@ bool matrixProfileNeedsApply = true;
 // Play an entry animation only when a matrix mode changes.
 // Do not replay it when returning from a sensor reaction.
 bool matrixEntryEffectPending = false;
+
+// Protect a newly started matrix entry animation from
+// being replaced by an incidental shake detection.
+bool matrixEntryEffectGuardActive = false;
+
+uint32_t matrixEntryEffectGuardUntilMs = 0;
 
 // Shake detection.
 bool shakeArmed = true;
@@ -438,14 +447,20 @@ void applyBehaviourState(
 
             EmotionRenderer::setCuriosity(false);
 
-            EmotionRenderer::setMood(
-                EmotionRenderer::Mood::TIRED
-            );
+            // Preserve the active matrix personality.
+            // Use the original tired expression in IDLE mode.
+            if (!preserveMatrixMood)
+            {
+                EmotionRenderer::setMood(
+                    EmotionRenderer::Mood::TIRED
+                );
+            }
 
             EmotionRenderer::setGaze(
                 EmotionRenderer::GazeDirection::DOWN
             );
 
+            break;
             break;
 
 
@@ -702,6 +717,45 @@ void applyMatrixModeProfile(
 }
 
 // ------------------------------------------------------------
+// APPLY PENDING MATRIX PERSONALITY
+// ------------------------------------------------------------
+//
+// Apply the requested matrix personality and start its entry
+// animation only when the matrix mode has actually changed.
+//
+// The entry-animation guard prevents an incidental MPU6050
+// shake detection from replacing the new animation.
+//
+
+void applyPendingMatrixProfile(uint32_t nowMs)
+{
+    const bool playEntryEffect =
+        matrixEntryEffectPending;
+
+    applyMatrixModeProfile(
+        currentMatrixMode,
+        playEntryEffect
+    );
+
+    // Protect the entry animation for its complete duration.
+    if (playEntryEffect)
+    {
+        matrixEntryEffectGuardUntilMs =
+            nowMs + MATRIX_ENTRY_EFFECT_GUARD_MS;
+
+        matrixEntryEffectGuardActive = true;
+
+        Serial.printf(
+            "[ROBOT BEHAVIOUR] Protecting %s entry animation\n",
+            getMatrixModeName(currentMatrixMode)
+        );
+    }
+
+    matrixEntryEffectPending = false;
+    matrixProfileNeedsApply = false;
+}
+
+// ------------------------------------------------------------
 // START SHAKE REACTION
 // ------------------------------------------------------------
 
@@ -790,6 +844,8 @@ void update(
         matrixEntryEffectPending =
             detectedMatrixMode != MatrixMode::IDLE &&
             detectedMatrixMode != MatrixMode::UNKNOWN;
+            // A new matrix mode replaces the previous entry event.
+            matrixEntryEffectGuardActive = false;
 
         Serial.printf(
             "[ROBOT BEHAVIOUR] Matrix mode detected: %s\n",
@@ -842,13 +898,7 @@ void update(
 
         if (matrixProfileNeedsApply)
         {
-            applyMatrixModeProfile(
-                currentMatrixMode,
-                matrixEntryEffectPending
-            );
-
-            matrixEntryEffectPending = false;
-            matrixProfileNeedsApply = false;
+            applyPendingMatrixProfile(nowMs);
         }
 
         return;
@@ -869,13 +919,6 @@ void update(
             gy * gy +
             gz * gz
         );
-
-
-    // A sufficiently quiet reading rearms shake detection.
-    if (gyroMagnitude <= SHAKE_RELEASE_DPS)
-    {
-        shakeArmed = true;
-    }
 
 
     // --------------------------------------------------------
@@ -906,9 +949,22 @@ void update(
 
         shakeVisualActive = false;
 
+        Serial.printf(
+            "[ROBOT BEHAVIOUR] Shake reaction finished; restoring %s\n",
+            getMatrixModeName(currentMatrixMode)
+        );
+
         // The temporary shake expression has ended.
         // Restore whichever behaviour currently has priority.
         matrixProfileNeedsApply = true;
+    }
+
+    // Rearm shake detection only after the previous visual
+    // reaction has finished. This prevents repeated shake
+    // events from interrupting personality restoration.
+    if (gyroMagnitude <= SHAKE_RELEASE_DPS)
+    {
+        shakeArmed = true;
     }
 
 
@@ -940,13 +996,7 @@ void update(
     // a temporary shake reaction finishes.
     if (matrixProfileNeedsApply)
     {
-        applyMatrixModeProfile(
-            currentMatrixMode,
-            matrixEntryEffectPending
-        );
-
-        matrixEntryEffectPending = false;
-        matrixProfileNeedsApply = false;
+        applyPendingMatrixProfile(nowMs);
 
         // The matrix profile sets its own gaze.
         // Reapply the current tilt as an overlay without
@@ -968,6 +1018,30 @@ void update(
         );
     }
 
+    // --------------------------------------------------------
+    // PROTECT MATRIX ENTRY ANIMATION
+    // --------------------------------------------------------
+
+    if (matrixEntryEffectGuardActive)
+    {
+        if (!timeReached(
+                nowMs,
+                matrixEntryEffectGuardUntilMs))
+        {
+            // Discard shake events during the entry animation.
+            // A new shake can be detected after the sensor
+            // returns below the release threshold.
+            if (gyroMagnitude >= SHAKE_TRIGGER_DPS)
+            {
+                shakeArmed = false;
+            }
+
+            return;
+        }
+
+        // The entry animation has had enough time to finish.
+        matrixEntryEffectGuardActive = false;
+    }
 
     // --------------------------------------------------------
     // SHAKE DETECTION
@@ -1042,6 +1116,9 @@ void reset()
 
     matrixProfileNeedsApply = true;
     matrixEntryEffectPending = false;
+
+    matrixEntryEffectGuardActive = false;
+    matrixEntryEffectGuardUntilMs = 0;
 
     // Restore shake detection.
     shakeArmed = true;
