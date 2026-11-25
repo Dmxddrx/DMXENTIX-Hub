@@ -38,6 +38,7 @@ constexpr uint32_t FLICKER_DURATION_MS = 520;
 constexpr uint32_t CONFUSED_DURATION_MS = 1200;
 constexpr uint32_t LAUGH_DURATION_MS = 1200;
 constexpr uint32_t SHAKE_DURATION_MS = 700;
+constexpr uint32_t SWEAT_DURATION_MS = 1500;
 
 constexpr float ANIMATION_PI = 3.14159265f;
 constexpr float ANIMATION_TWO_PI = 6.28318530f;
@@ -340,6 +341,12 @@ struct OneShotFrame
     float offsetY = 0.0f;
 
     bool useHappyMood = false;
+
+    // Animated sweat droplets.
+    bool showLeftSweat = false;
+    bool showRightSweat = false;
+
+    float sweatProgress = 0.0f;
 };
 
 
@@ -496,6 +503,44 @@ OneShotFrame updateOneShotAnimation(uint32_t nowMs)
 
             frame.offsetY =
                 6.0f * sinf(phase) * decay;
+
+            break;
+        }
+
+                // ----------------------------------------------------
+        // SWEAT — LEFT SIDE
+        // ----------------------------------------------------
+
+        case OneShotAnimation::SWEAT_LEFT:
+        {
+            frame.showLeftSweat = true;
+            frame.sweatProgress = progress;
+
+            break;
+        }
+
+        // ----------------------------------------------------
+        // SWEAT — RIGHT SIDE
+        // ----------------------------------------------------
+
+        case OneShotAnimation::SWEAT_RIGHT:
+        {
+            frame.showRightSweat = true;
+            frame.sweatProgress = progress;
+
+            break;
+        }
+
+        // ----------------------------------------------------
+        // SWEAT — BOTH SIDES
+        // ----------------------------------------------------
+
+        case OneShotAnimation::SWEAT_BOTH:
+        {
+            frame.showLeftSweat = true;
+            frame.showRightSweat = true;
+
+            frame.sweatProgress = progress;
 
             break;
         }
@@ -979,6 +1024,41 @@ void drawSingleEye(
     );
 }
 
+// ------------------------------------------------------------
+// DRAW ANIMATED SWEAT DROPLET
+// ------------------------------------------------------------
+//
+// Draws a small downward-pointing teardrop.
+//
+// The animation position is controlled by the caller.
+// This function only draws the droplet.
+//
+
+void drawSweatDrop(
+    Adafruit_GFX &canvas,
+    int16_t centerX,
+    int16_t topY
+)
+{
+    // Pointed upper section.
+    canvas.fillTriangle(
+        centerX,
+        topY,
+        centerX - 2,
+        topY + 4,
+        centerX + 2,
+        topY + 4,
+        EYE_COLOR
+    );
+
+    // Rounded lower section.
+    canvas.fillCircle(
+        centerX,
+        topY + 4,
+        2,
+        EYE_COLOR
+    );
+}
 
 // ------------------------------------------------------------
 // LANDSCAPE ANIMATION RENDERER
@@ -1297,7 +1377,9 @@ void drawLandscapeEyes(
             state.cyclopsBlend
         );
 
-    // Convert eye centres back into top-left drawing positions.
+    // --------------------------------------------------------
+    // CONVERT EYE CENTRES BACK INTO DRAWING POSITIONS
+    // --------------------------------------------------------
     const int16_t leftDrawX =
         static_cast<int16_t>(
             animatedLeftCenterX -
@@ -1313,33 +1395,12 @@ void drawLandscapeEyes(
         );
 
     // --------------------------------------------------------
-    // FULL CYCLOPS MODE
+    // DRAW THE CONVERGING EYE PAIR
     // --------------------------------------------------------
 
-    // Once both eyes have practically merged, draw only the
-    // left eye. Its enlarged geometry becomes the central eye.
-    if (state.cyclopsBlend >= 0.995f)
-    {
-        const int16_t cyclopsX =
-            static_cast<int16_t>(
-                displayCenterX -
-                (static_cast<float>(leftWidth) / 2.0f) +
-                0.5f
-            );
-
-        drawSingleEye(
-            canvas,
-            state.leftEye,
-            cyclopsX,
-            eyeCenterY,
-            state.cornerRadiusScale,
-            leftMood,
-            false,
-            nowMs
-        );
-
-        return;
-    }
+    // Both eyes continuously move toward the display centre.
+    // In full Cyclops mode, their identical shapes overlap
+    // perfectly and visually become one central eye.
 
     // --------------------------------------------------------
     // DRAW LEFT EYE
@@ -1372,34 +1433,78 @@ void drawLandscapeEyes(
     );
 
     // --------------------------------------------------------
-    // DRAW LEFT EYE
+    // ANIMATED SWEAT DROPLETS
     // --------------------------------------------------------
 
-    drawSingleEye(
-        canvas,
-        state.leftEye,
-        leftX + eyeOffsetX,
-        eyeCenterY,
-        state.cornerRadiusScale,
-        leftMood,
-        false,
-        nowMs
-    );
+    // Smooth the droplet's movement along the outside edges.
+    const float sweatTravel =
+        smoothStep(oneShot.sweatProgress);
+
+    // Move the droplets downward.
+    const int16_t sweatOffsetY =
+        static_cast<int16_t>(
+            22.0f * sweatTravel + 0.5f
+        );
 
     // --------------------------------------------------------
-    // DRAW RIGHT EYE
+    // LEFT SWEAT DROPLET
     // --------------------------------------------------------
 
-    drawSingleEye(
-        canvas,
-        state.rightEye,
-        rightX + eyeOffsetX,
-        eyeCenterY,
-        state.cornerRadiusScale,
-        rightMood,
-        true,
-        nowMs
-    );
+    if (oneShot.showLeftSweat)
+    {
+        // Start just outside the upper-left eye corner.
+        const int16_t leftDropX =
+            leftDrawX - 3 -
+            static_cast<int16_t>(
+                3.0f * sweatTravel + 0.5f
+            );
+
+        const int16_t leftEyeTop =
+            eyeCenterY -
+            static_cast<int16_t>(
+                state.leftEye.eyeHeight * 0.5f + 0.5f
+            );
+
+        const int16_t leftDropY =
+            leftEyeTop - 5 + sweatOffsetY;
+
+        drawSweatDrop(
+            canvas,
+            leftDropX,
+            leftDropY
+        );
+    }
+
+    // --------------------------------------------------------
+    // RIGHT SWEAT DROPLET
+    // --------------------------------------------------------
+
+    if (oneShot.showRightSweat)
+    {
+        // Start just outside the upper-right eye corner.
+        const int16_t rightDropX =
+            rightDrawX + rightWidth + 3 +
+            static_cast<int16_t>(
+                3.0f * sweatTravel + 0.5f
+            );
+
+        const int16_t rightEyeTop =
+            eyeCenterY -
+            static_cast<int16_t>(
+                state.rightEye.eyeHeight * 0.5f + 0.5f
+            );
+
+        const int16_t rightDropY =
+            rightEyeTop - 5 + sweatOffsetY;
+
+        drawSweatDrop(
+            canvas,
+            rightDropX,
+            rightDropY
+        );
+    }
+
+    
 }
 
 } // namespace
@@ -1752,17 +1857,36 @@ void setGeometryPreset(GeometryPreset preset)
             break;
 
         // ----------------------------------------------------
+        // REVERSE INDEPENDENT EYE GEOMETRY
+        // ----------------------------------------------------
+
+        case GeometryPreset::REVERSE_INDEPENDENT:
+
+            // Left eye: narrower and taller.
+            leftScaleX = 0.85f;
+            leftScaleY = 1.20f;
+
+            // Right eye: wider and shorter.
+            rightScaleX = 1.20f;
+            rightScaleY = 0.85f;
+
+            break;
+
+        // ----------------------------------------------------
         // CYCLOPS
         // ----------------------------------------------------
 
         case GeometryPreset::CYCLOPS:
 
-            // A larger single eye.
+            // Both eyes gradually become the same size.
+            // They will overlap perfectly at the display centre.
             leftScaleX = 1.25f;
             leftScaleY = 1.12f;
 
-            // Keep the normal spacing as the eyes move
-            // toward the centre of the display.
+            rightScaleX = 1.25f;
+            rightScaleY = 1.12f;
+
+            // Move both eyes toward the centre.
             cyclopsMode = true;
 
             break;
@@ -1864,6 +1988,13 @@ void playOneShot(OneShotAnimation animation)
         case OneShotAnimation::SHAKE_VERTICAL:
             state.oneShotDurationMs =
                 SHAKE_DURATION_MS;
+            break;
+
+        case OneShotAnimation::SWEAT_LEFT:
+        case OneShotAnimation::SWEAT_RIGHT:
+        case OneShotAnimation::SWEAT_BOTH:
+            state.oneShotDurationMs =
+                SWEAT_DURATION_MS;
             break;
 
         case OneShotAnimation::NONE:

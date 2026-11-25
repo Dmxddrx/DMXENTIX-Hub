@@ -54,6 +54,7 @@ enum class GeometryPreset : uint8_t
     SMALL_RADIUS,
     LARGE_RADIUS,
     INDEPENDENT,
+    REVERSE_INDEPENDENT,
     CYCLOPS,
     RESTORE_EYE_PAIR
 };
@@ -67,7 +68,10 @@ enum class OneShotAnimation : uint8_t
     CONFUSED,
     LAUGH,
     SHAKE_HORIZONTAL,
-    SHAKE_VERTICAL
+    SHAKE_VERTICAL,
+    SWEAT_LEFT,
+    SWEAT_RIGHT,
+    SWEAT_BOTH
 };
 
 // Draw and update the robot eyes.

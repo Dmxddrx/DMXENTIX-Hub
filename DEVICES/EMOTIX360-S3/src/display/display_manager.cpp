@@ -28,7 +28,7 @@ constexpr int DISPLAY_NATIVE_HEIGHT = 64;
 constexpr int OLED_RESET = -1;
 constexpr uint8_t OLED_PAGE_COUNT = 4;
 // Number of manually selectable eye behaviour tests.
-constexpr uint8_t EYE_DEMO_STEP_COUNT = 47;
+constexpr uint8_t EYE_DEMO_STEP_COUNT = 52;
 
 
 Adafruit_SSD1306 display(
@@ -467,17 +467,22 @@ const char *getEyeDemoStepName(uint8_t step)
         "SMALL_RADIUS",               // 33
         "LARGE_RADIUS",               // 34
         "INDEPENDENT_GEOMETRY",       // 35
-        "CYCLOPS",                    // 36
-        "RESTORE_EYE_PAIR",           // 37
-        "CURIOSITY_LOOK_LEFT",        // 38
-        "CURIOSITY_LOOK_RIGHT",       // 39
-        "CURIOSITY_DISABLED",         // 40
-        "FLICKER_HORIZONTAL",         // 41
-        "FLICKER_VERTICAL",           // 42
-        "CONFUSED",                   // 43
-        "LAUGH",                      // 44
-        "SHAKE_HORIZONTAL",           // 45
-        "SHAKE_VERTICAL"              // 46
+        "REVERSE_INDEPENDENT_GEOMETRY", // 36
+        "CYCLOPS",                    // 37
+        "RESTORE_EYE_PAIR",           // 38
+        "CURIOSITY_LOOK_LEFT",        // 39
+        "CURIOSITY_LOOK_RIGHT",       // 40
+        "CURIOSITY_DISABLED",         // 41
+        "FLICKER_HORIZONTAL",         // 42
+        "FLICKER_VERTICAL",           // 43
+        "CONFUSED",                   // 44
+        "LAUGH",                      // 45
+        "SHAKE_HORIZONTAL",           // 46
+        "SHAKE_VERTICAL",              // 47
+        "SWEAT_LEFT",                  // 48
+        "SWEAT_RIGHT",                 // 49
+        "SWEAT_BOTH",                  // 50
+        "SWEAT_CLEAR"                  // 51
     };
 
     return step < EYE_DEMO_STEP_COUNT
@@ -802,14 +807,26 @@ void applyEyeDemoStep(uint8_t step)
             );
             break;
 
+        // ----------------------------------------------------
+        // REVERSE INDEPENDENT EYE GEOMETRY
+        // ----------------------------------------------------
+
         case 36:
+            // Left eye becomes narrow and tall.
+            // Right eye becomes wide and short.
+            EmotionRenderer::setGeometryPreset(
+                GeometryPreset::REVERSE_INDEPENDENT
+            );
+            break;
+
+        case 37:
             // Replace the normal pair with one central eye.
             EmotionRenderer::setGeometryPreset(
                 GeometryPreset::CYCLOPS
             );
             break;
 
-        case 37:
+        case 38:
             // Restore the original two-eye arrangement.
             EmotionRenderer::setGeometryPreset(
                 GeometryPreset::RESTORE_EYE_PAIR
@@ -820,21 +837,21 @@ void applyEyeDemoStep(uint8_t step)
         // CURIOSITY TESTS
         // ----------------------------------------------------
 
-        case 38:
+        case 39:
             // Look left and enlarge the left eye.
             EmotionRenderer::setGaze(
                 GazeDirection::LEFT
             );
             break;
 
-        case 39:
+        case 40:
             // Look right and enlarge the right eye.
             EmotionRenderer::setGaze(
                 GazeDirection::RIGHT
             );
             break;
 
-        case 40:
+        case 41:
             // Disable curiosity and restore normal eye size.
             EmotionRenderer::setCuriosity(false);
 
@@ -847,45 +864,77 @@ void applyEyeDemoStep(uint8_t step)
         // ONE-SHOT EYE ANIMATIONS
         // ----------------------------------------------------
 
-        case 41:
+        case 42:
             // Rapid horizontal eye compression.
             EmotionRenderer::playOneShot(
                 OneShotAnimation::FLICKER_HORIZONTAL
             );
             break;
 
-        case 42:
+        case 43:
             // Rapid vertical eye compression.
             EmotionRenderer::playOneShot(
                 OneShotAnimation::FLICKER_VERTICAL
             );
             break;
 
-        case 43:
+        case 44:
             // Confused side-to-side eye movement.
             EmotionRenderer::playOneShot(
                 OneShotAnimation::CONFUSED
             );
             break;
 
-        case 44:
+        case 45:
             // Repeated happy-eye squash animation.
             EmotionRenderer::playOneShot(
                 OneShotAnimation::LAUGH
             );
             break;
 
-        case 45:
+        case 46:
             // Horizontal shaking.
             EmotionRenderer::playOneShot(
                 OneShotAnimation::SHAKE_HORIZONTAL
             );
             break;
 
-        case 46:
+        case 47:
             // Vertical shaking.
             EmotionRenderer::playOneShot(
                 OneShotAnimation::SHAKE_VERTICAL
+            );
+            break;
+
+        // ----------------------------------------------------
+        // ANIMATED SWEAT EFFECTS
+        // ----------------------------------------------------
+
+        case 48:
+            // Animate a sweat droplet along the left side.
+            EmotionRenderer::playOneShot(
+                OneShotAnimation::SWEAT_LEFT
+            );
+            break;
+
+        case 49:
+            // Animate a sweat droplet along the right side.
+            EmotionRenderer::playOneShot(
+                OneShotAnimation::SWEAT_RIGHT
+            );
+            break;
+
+        case 50:
+            // Animate sweat droplets on both sides.
+            EmotionRenderer::playOneShot(
+                OneShotAnimation::SWEAT_BOTH
+            );
+            break;
+
+        case 51:
+            // Cancel the active sweat animation.
+            EmotionRenderer::playOneShot(
+                OneShotAnimation::NONE
             );
             break;
 
