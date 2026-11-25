@@ -16,6 +16,21 @@ constexpr float DEFAULT_EYE_HEIGHT = 38.0f;
 
 constexpr float DEFAULT_EYE_GAP = 18.0f;
 
+// ------------------------------------------------------------
+// PORTRAIT EYE LAYOUT
+// ------------------------------------------------------------
+
+// Preserve the existing 18 x 28 portrait eye dimensions.
+constexpr float PORTRAIT_SCALE_X =
+    18.0f / DEFAULT_EYE_WIDTH;
+
+constexpr float PORTRAIT_SCALE_Y =
+    28.0f / DEFAULT_EYE_HEIGHT;
+
+// Preserve the existing 16-pixel portrait eye spacing.
+constexpr float PORTRAIT_GAP_SCALE =
+    16.0f / DEFAULT_EYE_GAP;
+
 // Maximum movement of the complete eye pair.
 constexpr float MAX_GAZE_X = 12.0f;
 constexpr float MAX_GAZE_Y = 7.0f;
@@ -926,6 +941,8 @@ void drawSingleEye(
     int16_t eyeX,
     int16_t centerY,
     float cornerRadiusScale,
+    float renderScaleX,
+    float renderScaleY,
     const MoodShape &mood,
     bool rightEye,
     uint32_t nowMs
@@ -933,12 +950,12 @@ void drawSingleEye(
 {
     const int16_t eyeWidth =
         static_cast<int16_t>(
-            eye.eyeWidth + 0.5f
+            eye.eyeWidth * renderScaleX + 0.5f
         );
 
     const int16_t eyeHeight =
         static_cast<int16_t>(
-            eye.eyeHeight + 0.5f
+            eye.eyeHeight * renderScaleY + 0.5f
         );
 
     // Apply independent opening and blinking.
@@ -1017,8 +1034,15 @@ void drawSingleEye(
         eyeY,
         eyeWidth,
         visibleHeight,
-        static_cast<int16_t>(eye.topLid + 0.5f),
-        static_cast<int16_t>(eye.bottomLid + 0.5f),
+
+        static_cast<int16_t>(
+            eye.topLid * renderScaleY + 0.5f
+        ),
+
+        static_cast<int16_t>(
+            eye.bottomLid * renderScaleY + 0.5f
+        ),
+
         mood.angry,
         rightEye
     );
@@ -1061,14 +1085,28 @@ void drawSweatDrop(
 }
 
 // ------------------------------------------------------------
-// LANDSCAPE ANIMATION RENDERER
+// ANIMATED ROBOT EYE RENDERER
+// Supports both landscape and portrait layouts.
 // ------------------------------------------------------------
 
-void drawLandscapeEyes(
+void drawAnimatedEyes(
     Adafruit_GFX &canvas,
-    uint32_t nowMs
+    uint32_t nowMs,
+    bool portrait
 )
 {
+    // Select drawing dimensions for the current orientation.
+    // Animation state remains in the original landscape units.
+
+    const float renderScaleX =
+        portrait ? PORTRAIT_SCALE_X : 1.0f;
+
+    const float renderScaleY =
+        portrait ? PORTRAIT_SCALE_Y : 1.0f;
+
+    const float renderGapScale =
+        portrait ? PORTRAIT_GAP_SCALE : 1.0f;
+
     if (!state.initialized)
     {
         initializeAnimation(nowMs);
@@ -1289,17 +1327,17 @@ void drawLandscapeEyes(
 
     const int16_t leftWidth =
         static_cast<int16_t>(
-            state.leftEye.eyeWidth + 0.5f
+            state.leftEye.eyeWidth * renderScaleX + 0.5f
         );
 
     const int16_t rightWidth =
         static_cast<int16_t>(
-            state.rightEye.eyeWidth + 0.5f
+            state.rightEye.eyeWidth * renderScaleX + 0.5f
         );
 
     const int16_t eyeGap =
         static_cast<int16_t>(
-            state.eyeGap + 0.5f
+            state.eyeGap * renderGapScale + 0.5f
         );
 
     const int16_t totalWidth =
@@ -1320,17 +1358,59 @@ void drawLandscapeEyes(
     // --------------------------------------------------------
 
     const float combinedOffsetX =
-        state.gazeX + oneShot.offsetX;
+        (state.gazeX + oneShot.offsetX) * renderScaleX;
 
     const float combinedOffsetY =
-        state.gazeY + oneShot.offsetY;
+        (state.gazeY + oneShot.offsetY) * renderScaleY;
 
-    const int16_t eyeOffsetX =
+    int16_t eyeOffsetX =
         static_cast<int16_t>(
             combinedOffsetX >= 0.0f
             ? combinedOffsetX + 0.5f
             : combinedOffsetX - 0.5f
         );
+
+    // --------------------------------------------------------
+    // KEEP PORTRAIT EYES INSIDE DISPLAY BOUNDARIES
+    // --------------------------------------------------------
+
+    if (portrait)
+    {
+        // When Cyclops is active, both eye centres converge.
+        // Therefore, use an interpolated effective pair width
+        // instead of permanently reserving space for two eyes.
+
+        const float widestEye =
+            (leftWidth > rightWidth)
+            ? static_cast<float>(leftWidth)
+            : static_cast<float>(rightWidth);
+
+        const float effectivePairWidth =
+            static_cast<float>(totalWidth) +
+            (widestEye - static_cast<float>(totalWidth)) *
+            state.cyclopsBlend;
+
+        float availableOffset =
+            (static_cast<float>(canvas.width()) -
+             effectivePairWidth) * 0.5f - 1.0f;
+
+        if (availableOffset < 0.0f)
+        {
+            availableOffset = 0.0f;
+        }
+
+        const int16_t maxPortraitOffset =
+            static_cast<int16_t>(availableOffset);
+
+        if (eyeOffsetX > maxPortraitOffset)
+        {
+            eyeOffsetX = maxPortraitOffset;
+        }
+        else if (eyeOffsetX < -maxPortraitOffset)
+        {
+            eyeOffsetX = -maxPortraitOffset;
+        }
+    }
 
     const int16_t eyeOffsetY =
         static_cast<int16_t>(
@@ -1412,6 +1492,8 @@ void drawLandscapeEyes(
         leftDrawX,
         eyeCenterY,
         state.cornerRadiusScale,
+        renderScaleX,
+        renderScaleY,
         leftMood,
         false,
         nowMs
@@ -1427,6 +1509,8 @@ void drawLandscapeEyes(
         rightDrawX,
         eyeCenterY,
         state.cornerRadiusScale,
+        renderScaleX,
+        renderScaleY,
         rightMood,
         true,
         nowMs
@@ -1443,7 +1527,7 @@ void drawLandscapeEyes(
     // Move the droplets downward.
     const int16_t sweatOffsetY =
         static_cast<int16_t>(
-            22.0f * sweatTravel + 0.5f
+            22.0f * renderScaleY * sweatTravel + 0.5f
         );
 
     // --------------------------------------------------------
@@ -1453,16 +1537,23 @@ void drawLandscapeEyes(
     if (oneShot.showLeftSweat)
     {
         // Start just outside the upper-left eye corner.
-        const int16_t leftDropX =
-            leftDrawX - 3 -
+        int16_t leftDropX =
+            leftDrawX -
+            static_cast<int16_t>(3.0f * renderScaleX + 0.5f) -
             static_cast<int16_t>(
-                3.0f * sweatTravel + 0.5f
+                3.0f * renderScaleX * sweatTravel + 0.5f
             );
+
+        if (leftDropX < 2)
+        {
+            leftDropX = 2;
+        }
 
         const int16_t leftEyeTop =
             eyeCenterY -
             static_cast<int16_t>(
-                state.leftEye.eyeHeight * 0.5f + 0.5f
+                state.leftEye.eyeHeight *
+                renderScaleY * 0.5f + 0.5f
             );
 
         const int16_t leftDropY =
@@ -1482,18 +1573,24 @@ void drawLandscapeEyes(
     if (oneShot.showRightSweat)
     {
         // Start just outside the upper-right eye corner.
-        const int16_t rightDropX =
-            rightDrawX + rightWidth + 3 +
+        int16_t rightDropX =
+            rightDrawX + rightWidth +
+            static_cast<int16_t>(3.0f * renderScaleX + 0.5f) +
             static_cast<int16_t>(
-                3.0f * sweatTravel + 0.5f
+                3.0f * renderScaleX * sweatTravel + 0.5f
             );
+
+        if (rightDropX > canvas.width() - 3)
+        {
+            rightDropX = canvas.width() - 3;
+        }
 
         const int16_t rightEyeTop =
             eyeCenterY -
             static_cast<int16_t>(
-                state.rightEye.eyeHeight * 0.5f + 0.5f
+                state.rightEye.eyeHeight *
+                renderScaleY * 0.5f + 0.5f
             );
-
         const int16_t rightDropY =
             rightEyeTop - 5 + sweatOffsetY;
 
@@ -1581,14 +1678,17 @@ void drawRobotEyes(
     uint32_t nowMs
 )
 {
-    // Portrait animation will be implemented separately.
-    if (canvas.width() < 100)
-    {
-        drawNeutralEyes(canvas);
-        return;
-    }
+    // Detect the current OLED orientation.
+    const bool portrait =
+        canvas.width() < 100;
 
-    drawLandscapeEyes(canvas, nowMs);
+    // Both orientations use the same animation engine.
+    // Only the rendering dimensions change.
+    drawAnimatedEyes(
+        canvas,
+        nowMs,
+        portrait
+    );
 }
 
 

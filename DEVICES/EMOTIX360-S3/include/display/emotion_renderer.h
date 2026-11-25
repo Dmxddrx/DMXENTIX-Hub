@@ -76,8 +76,9 @@ enum class OneShotAnimation : uint8_t
 
 // Draw and update the robot eyes.
 //
-// Landscape: animated face.
-// Portrait: existing static eye design.
+// Landscape and portrait: animated robot face.
+// Both orientations share the same animation state and behaviours.
+// Only eye dimensions and movement distances are adapted.
 //
 // DisplayManager retains ownership of the OLED.
 void drawRobotEyes(
