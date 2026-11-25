@@ -5,6 +5,7 @@
 
 #include <Arduino.h>
 #include <math.h>
+#include <string.h>
 
 namespace RobotBehaviour {
 namespace {
@@ -54,6 +55,25 @@ enum class BehaviourState : uint8_t
     TILT_BACKWARD
 };
 
+// ------------------------------------------------------------
+// MATRIX ANIMATION MODES
+// ------------------------------------------------------------
+
+enum class MatrixMode : uint8_t
+{
+    UNKNOWN,
+
+    IDLE,
+    STARTUP,
+
+    SAND_CLOCK,
+    WATER,
+    SAND_GRAVITY,
+
+    HEART,
+    RAIN,
+    WAVES
+};
 
 // ------------------------------------------------------------
 // INTERNAL STATE
@@ -61,6 +81,23 @@ enum class BehaviourState : uint8_t
 
 BehaviourState currentState =
     BehaviourState::UNINITIALIZED;
+
+// ------------------------------------------------------------
+// MATRIX MODE AWARENESS
+// ------------------------------------------------------------
+
+// Current matrix animation reported by AnimationManager.
+MatrixMode currentMatrixMode = MatrixMode::UNKNOWN;
+
+bool matrixModeInitialized = false;
+
+// Apply the matrix personality when a mode changes,
+// a tilt ends, or a temporary shake reaction finishes.
+bool matrixProfileNeedsApply = true;
+
+// Play an entry animation only when a matrix mode changes.
+// Do not replay it when returning from a sensor reaction.
+bool matrixEntryEffectPending = false;
 
 // Shake detection.
 bool shakeArmed = true;
@@ -114,6 +151,83 @@ const char *getBehaviourName(BehaviourState behaviour)
         case BehaviourState::UNINITIALIZED:
         default:
             return "UNINITIALIZED";
+    }
+}
+
+// ------------------------------------------------------------
+// PARSE MATRIX ANIMATION MODE
+// ------------------------------------------------------------
+
+MatrixMode parseMatrixMode(const char *name)
+{
+    if (name == nullptr)
+    {
+        return MatrixMode::UNKNOWN;
+    }
+
+    if (strcmp(name, "IDLE") == 0)
+        return MatrixMode::IDLE;
+
+    if (strcmp(name, "STARTUP") == 0)
+        return MatrixMode::STARTUP;
+
+    if (strcmp(name, "SAND_CLOCK") == 0)
+        return MatrixMode::SAND_CLOCK;
+
+    if (strcmp(name, "WATER") == 0)
+        return MatrixMode::WATER;
+
+    if (strcmp(name, "SAND_GRAVITY") == 0)
+        return MatrixMode::SAND_GRAVITY;
+
+    if (strcmp(name, "HEART") == 0)
+        return MatrixMode::HEART;
+
+    if (strcmp(name, "RAIN") == 0)
+        return MatrixMode::RAIN;
+
+    if (strcmp(name, "WAVES") == 0)
+        return MatrixMode::WAVES;
+
+    return MatrixMode::UNKNOWN;
+}
+
+
+// ------------------------------------------------------------
+// GET MATRIX MODE NAME
+// ------------------------------------------------------------
+
+const char *getMatrixModeName(MatrixMode mode)
+{
+    switch (mode)
+    {
+        case MatrixMode::IDLE:
+            return "IDLE";
+
+        case MatrixMode::STARTUP:
+            return "STARTUP";
+
+        case MatrixMode::SAND_CLOCK:
+            return "SAND_CLOCK";
+
+        case MatrixMode::WATER:
+            return "WATER";
+
+        case MatrixMode::SAND_GRAVITY:
+            return "SAND_GRAVITY";
+
+        case MatrixMode::HEART:
+            return "HEART";
+
+        case MatrixMode::RAIN:
+            return "RAIN";
+
+        case MatrixMode::WAVES:
+            return "WAVES";
+
+        case MatrixMode::UNKNOWN:
+        default:
+            return "UNKNOWN";
     }
 }
 
@@ -354,6 +468,222 @@ void applyBehaviourState(
     );
 }
 
+// ------------------------------------------------------------
+// APPLY MATRIX ANIMATION PERSONALITY
+// ------------------------------------------------------------
+//
+// Each MAX7219 animation mode gives the OLED face
+// a corresponding personality.
+//
+// These are base expressions. MPU6050 tilt and shake
+// reactions can temporarily override them.
+//
+
+void applyMatrixModeProfile(
+    MatrixMode mode,
+    bool playEntryEffect
+)
+{
+    using EmotionRenderer::Mood;
+    using EmotionRenderer::GazeDirection;
+    using EmotionRenderer::OneShotAnimation;
+
+    // Keep normal blinking available.
+    EmotionRenderer::setAutomaticBlink(true);
+
+    // Set predictable defaults before selecting the profile.
+    EmotionRenderer::setCuriosity(false);
+    EmotionRenderer::setIdleGaze(false);
+
+    Mood targetMood = Mood::NEUTRAL;
+    GazeDirection targetGaze = GazeDirection::CENTER;
+
+    OneShotAnimation entryAnimation =
+        OneShotAnimation::NONE;
+
+    bool enableCuriosity = false;
+    bool enableIdleGaze = false;
+
+
+    switch (mode)
+    {
+        // ----------------------------------------------------
+        // IDLE
+        // ----------------------------------------------------
+
+        case MatrixMode::IDLE:
+
+            targetMood = Mood::NEUTRAL;
+            targetGaze = GazeDirection::CENTER;
+
+            enableIdleGaze = true;
+
+            break;
+
+
+        // ----------------------------------------------------
+        // STARTUP
+        // ----------------------------------------------------
+
+        case MatrixMode::STARTUP:
+
+            // The robot looks alert during startup.
+            targetMood = Mood::SURPRISED;
+            targetGaze = GazeDirection::CENTER;
+
+            entryAnimation =
+                OneShotAnimation::FLICKER_VERTICAL;
+
+            break;
+
+
+        // ----------------------------------------------------
+        // HEART
+        // ----------------------------------------------------
+
+        case MatrixMode::HEART:
+
+            // Happy expression matches the heart animation.
+            targetMood = Mood::HAPPY;
+            targetGaze = GazeDirection::CENTER;
+
+            entryAnimation =
+                OneShotAnimation::LAUGH;
+
+            break;
+
+
+        // ----------------------------------------------------
+        // RAIN
+        // ----------------------------------------------------
+
+        case MatrixMode::RAIN:
+
+            // Look upward as rain begins.
+            targetMood = Mood::SURPRISED;
+            targetGaze = GazeDirection::UP;
+
+            // Brief falling droplets around the eyes.
+            entryAnimation =
+                OneShotAnimation::SWEAT_BOTH;
+
+            break;
+
+
+        // ----------------------------------------------------
+        // WAVES
+        // ----------------------------------------------------
+
+        case MatrixMode::WAVES:
+
+            // The robot looks around as the wave animation starts.
+            targetMood = Mood::NEUTRAL;
+            targetGaze = GazeDirection::CENTER;
+
+            enableIdleGaze = true;
+
+            entryAnimation =
+                OneShotAnimation::CONFUSED;
+
+            break;
+
+
+        // ----------------------------------------------------
+        // SAND CLOCK
+        // ----------------------------------------------------
+
+        case MatrixMode::SAND_CLOCK:
+
+            // A calmer expression looking down at falling sand.
+            targetMood = Mood::TIRED;
+            targetGaze = GazeDirection::DOWN;
+
+            entryAnimation =
+                OneShotAnimation::FLICKER_VERTICAL;
+
+            break;
+
+
+        // ----------------------------------------------------
+        // WATER
+        // ----------------------------------------------------
+
+        case MatrixMode::WATER:
+
+            // Curious expression looking toward the water.
+            targetMood = Mood::HAPPY;
+            targetGaze = GazeDirection::DOWN_RIGHT;
+
+            enableCuriosity = true;
+
+            entryAnimation =
+                OneShotAnimation::CONFUSED;
+
+            break;
+
+
+        // ----------------------------------------------------
+        // SAND GRAVITY
+        // ----------------------------------------------------
+
+        case MatrixMode::SAND_GRAVITY:
+
+            // Watch the falling material with a surprised face.
+            targetMood = Mood::SURPRISED;
+            targetGaze = GazeDirection::DOWN;
+
+            entryAnimation =
+                OneShotAnimation::SHAKE_VERTICAL;
+
+            break;
+
+
+        case MatrixMode::UNKNOWN:
+        default:
+
+            targetMood = Mood::NEUTRAL;
+            targetGaze = GazeDirection::CENTER;
+
+            enableIdleGaze = true;
+
+            break;
+    }
+
+
+    // --------------------------------------------------------
+    // APPLY BASE EXPRESSION
+    // --------------------------------------------------------
+
+    EmotionRenderer::setMood(targetMood);
+
+    EmotionRenderer::setCuriosity(enableCuriosity);
+
+    EmotionRenderer::setGaze(targetGaze);
+
+    EmotionRenderer::setIdleGaze(enableIdleGaze);
+
+
+    // --------------------------------------------------------
+    // PLAY MATRIX MODE ENTRY EFFECT
+    // --------------------------------------------------------
+
+    // This only runs once when entering a matrix mode.
+    // Restoring a profile after tilt or shaking does not
+    // replay the entry animation.
+
+    if (playEntryEffect &&
+        entryAnimation != OneShotAnimation::NONE)
+    {
+        EmotionRenderer::playOneShot(
+            entryAnimation
+        );
+    }
+
+    Serial.printf(
+        "[ROBOT BEHAVIOUR] Matrix personality: %s\n",
+        getMatrixModeName(mode)
+    );
+}
 
 // ------------------------------------------------------------
 // START SHAKE REACTION
@@ -391,6 +721,10 @@ void startShakeReaction(
     shakeVisualUntilMs =
         nowMs + SHAKE_VISUAL_HOLD_MS;
 
+    // Restore the current matrix personality after the
+    // temporary shake reaction has finished.
+    matrixProfileNeedsApply = true;
+
     lastShakeMs = nowMs;
 
     shakeTriggeredBefore = true;
@@ -414,33 +748,92 @@ void startShakeReaction(
 // UPDATE ROBOT BEHAVIOUR
 // ------------------------------------------------------------
 
-void update(uint32_t nowMs)
+void update(
+    uint32_t nowMs,
+    const char *matrixModeName
+)
 {
-    MPU6050::Data imu{};
+    // --------------------------------------------------------
+    // CHECK MATRIX MODE CHANGES
+    // --------------------------------------------------------
+
+    const MatrixMode detectedMatrixMode =
+        parseMatrixMode(matrixModeName);
+
+    if (!matrixModeInitialized ||
+        detectedMatrixMode != currentMatrixMode)
+    {
+        currentMatrixMode = detectedMatrixMode;
+
+        matrixModeInitialized = true;
+
+        // Apply the new matrix personality when higher-priority
+        // sensor reactions are not active.
+        matrixProfileNeedsApply = true;
+
+        matrixEntryEffectPending =
+            detectedMatrixMode != MatrixMode::IDLE &&
+            detectedMatrixMode != MatrixMode::UNKNOWN;
+
+        Serial.printf(
+            "[ROBOT BEHAVIOUR] Matrix mode detected: %s\n",
+            getMatrixModeName(currentMatrixMode)
+        );
+    }
+
 
     // --------------------------------------------------------
     // GET THE LATEST SENSOR SNAPSHOT
     // --------------------------------------------------------
 
-    if (!MPU6050::getData(imu) ||
-        !imu.valid ||
-        (uint32_t)(nowMs - imu.timestampMs) > SENSOR_STALE_MS)
+    MPU6050::Data imu{};
+
+    const bool sensorAvailable =
+        MPU6050::getData(imu) &&
+        imu.valid &&
+        (uint32_t)(nowMs - imu.timestampMs) <= SENSOR_STALE_MS;
+
+    // --------------------------------------------------------
+    // SENSOR UNAVAILABLE
+    // --------------------------------------------------------
+
+    if (!sensorAvailable)
     {
-        // Do not leave an old shake animation running
-        // when sensor data becomes unavailable.
+        // Cancel an unfinished shake animation.
         if (shakeVisualActive)
         {
             EmotionRenderer::playOneShot(
                 EmotionRenderer::OneShotAnimation::NONE
             );
+
+            shakeVisualActive = false;
+
+            matrixProfileNeedsApply = true;
         }
 
-        shakeVisualActive = false;
         shakeArmed = true;
 
-        applyBehaviourState(
-            BehaviourState::IDLE
-        );
+        // Restore the matrix personality instead of leaving
+        // the previous tilt expression on the screen.
+        if (currentState != BehaviourState::IDLE)
+        {
+            applyBehaviourState(
+                BehaviourState::IDLE
+            );
+
+            matrixProfileNeedsApply = true;
+        }
+
+        if (matrixProfileNeedsApply)
+        {
+            applyMatrixModeProfile(
+                currentMatrixMode,
+                matrixEntryEffectPending
+            );
+
+            matrixEntryEffectPending = false;
+            matrixProfileNeedsApply = false;
+        }
 
         return;
     }
@@ -491,23 +884,59 @@ void update(uint32_t nowMs)
                 shakeVisualUntilMs))
         {
             // Keep the temporary shake expression active.
+            // Matrix mode changes are remembered and applied later.
             return;
         }
 
         shakeVisualActive = false;
 
-        // Restore the current physical tilt behaviour,
-        // even when the detected state has not changed.
-        applyBehaviourState(
-            detectedState,
-            true
-        );
+        // The temporary shake expression has ended.
+        // Restore whichever behaviour currently has priority.
+        matrixProfileNeedsApply = true;
     }
-    else
+
+
+    // --------------------------------------------------------
+    // SENSOR TILT HAS PRIORITY OVER MATRIX PERSONALITY
+    // --------------------------------------------------------
+
+    if (detectedState != BehaviourState::IDLE)
     {
         applyBehaviourState(
             detectedState
         );
+    }
+    else
+    {
+        // ----------------------------------------------------
+        // RETURN FROM TILT TO NORMAL BEHAVIOUR
+        // ----------------------------------------------------
+
+        if (currentState != BehaviourState::IDLE)
+        {
+            applyBehaviourState(
+                BehaviourState::IDLE
+            );
+
+            // Reapply the current matrix personality.
+            matrixProfileNeedsApply = true;
+        }
+
+
+        // ----------------------------------------------------
+        // APPLY MATRIX PERSONALITY
+        // ----------------------------------------------------
+
+        if (matrixProfileNeedsApply)
+        {
+            applyMatrixModeProfile(
+                currentMatrixMode,
+                matrixEntryEffectPending
+            );
+
+            matrixEntryEffectPending = false;
+            matrixProfileNeedsApply = false;
+        }
     }
 
 
@@ -543,14 +972,6 @@ void update(uint32_t nowMs)
     // CLASSIFY SHAKE DIRECTION
     // --------------------------------------------------------
 
-    // MPU6050 orientation:
-    // gx contributes to the filtered roll angle.
-    // gy contributes to the filtered pitch angle.
-    //
-    // For this initial mapping:
-    // Roll/yaw-dominant movement -> horizontal eye shake.
-    // Pitch-dominant movement    -> vertical eye shake.
-
     const float horizontalRate =
         fmaxf(
             fabsf(gx),
@@ -585,6 +1006,15 @@ void reset()
     currentState =
         BehaviourState::UNINITIALIZED;
 
+    // Restore matrix mode detection.
+    currentMatrixMode = MatrixMode::UNKNOWN;
+
+    matrixModeInitialized = false;
+
+    matrixProfileNeedsApply = true;
+    matrixEntryEffectPending = false;
+
+    // Restore shake detection.
     shakeArmed = true;
 
     shakeTriggeredBefore = false;

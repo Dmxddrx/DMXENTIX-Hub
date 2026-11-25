@@ -1008,7 +1008,10 @@ void drawRobotPage(const Status &status)
     // Manual eye-demo tests always have priority.
     if (!status.eyeDemoActive)
     {
-        RobotBehaviour::update(now);
+        RobotBehaviour::update(
+            now,
+            status.modeName
+        );
     }
 
     EmotionRenderer::drawRobotEyes(display, now);
