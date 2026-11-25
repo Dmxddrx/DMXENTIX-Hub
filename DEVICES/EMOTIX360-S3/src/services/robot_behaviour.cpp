@@ -348,6 +348,13 @@ void applyBehaviourState(
     // Automatic blinking remains enabled in every behaviour.
     EmotionRenderer::setAutomaticBlink(true);
 
+    // Active matrix animations control the base eye mood.
+    // Tilt reactions only modify gaze and curiosity while
+    // a matrix personality is active.
+    const bool preserveMatrixMood =
+        currentMatrixMode != MatrixMode::IDLE &&
+        currentMatrixMode != MatrixMode::UNKNOWN;
+
 
     switch (newState)
     {
@@ -381,9 +388,12 @@ void applyBehaviourState(
 
             EmotionRenderer::setIdleGaze(false);
 
-            EmotionRenderer::setMood(
-                EmotionRenderer::Mood::NEUTRAL
-            );
+            if (!preserveMatrixMood)
+            {
+                EmotionRenderer::setMood(
+                    EmotionRenderer::Mood::NEUTRAL
+                );
+            }
 
             EmotionRenderer::setCuriosity(true);
 
@@ -402,9 +412,12 @@ void applyBehaviourState(
 
             EmotionRenderer::setIdleGaze(false);
 
-            EmotionRenderer::setMood(
-                EmotionRenderer::Mood::NEUTRAL
-            );
+            if (!preserveMatrixMood)
+            {
+                EmotionRenderer::setMood(
+                    EmotionRenderer::Mood::TIRED
+                );
+            }
 
             EmotionRenderer::setCuriosity(true);
 
@@ -446,9 +459,12 @@ void applyBehaviourState(
 
             EmotionRenderer::setCuriosity(false);
 
-            EmotionRenderer::setMood(
-                EmotionRenderer::Mood::SURPRISED
-            );
+            if (!preserveMatrixMood)
+            {
+                EmotionRenderer::setMood(
+                    EmotionRenderer::Mood::SURPRISED
+                );
+            }
 
             EmotionRenderer::setGaze(
                 EmotionRenderer::GazeDirection::UP
@@ -897,46 +913,59 @@ void update(
 
 
     // --------------------------------------------------------
-    // SENSOR TILT HAS PRIORITY OVER MATRIX PERSONALITY
+    // APPLY MATRIX PERSONALITY AND SENSOR TILT OVERLAY
     // --------------------------------------------------------
 
-    if (detectedState != BehaviourState::IDLE)
+    // When the device returns to neutral, clear the previous
+    // tilt behaviour before restoring the matrix personality.
+    if (detectedState == BehaviourState::IDLE)
     {
-        applyBehaviourState(
-            detectedState
-        );
-    }
-    else
-    {
-        // ----------------------------------------------------
-        // RETURN FROM TILT TO NORMAL BEHAVIOUR
-        // ----------------------------------------------------
-
         if (currentState != BehaviourState::IDLE)
         {
             applyBehaviourState(
                 BehaviourState::IDLE
             );
 
-            // Reapply the current matrix personality.
             matrixProfileNeedsApply = true;
         }
+    }
 
 
-        // ----------------------------------------------------
-        // APPLY MATRIX PERSONALITY
-        // ----------------------------------------------------
+    // --------------------------------------------------------
+    // APPLY MATRIX PERSONALITY
+    // --------------------------------------------------------
 
-        if (matrixProfileNeedsApply)
+    // Matrix mode is the base expression.
+    // Apply it immediately when a mode changes or when
+    // a temporary shake reaction finishes.
+    if (matrixProfileNeedsApply)
+    {
+        applyMatrixModeProfile(
+            currentMatrixMode,
+            matrixEntryEffectPending
+        );
+
+        matrixEntryEffectPending = false;
+        matrixProfileNeedsApply = false;
+
+        // The matrix profile sets its own gaze.
+        // Reapply the current tilt as an overlay without
+        // replacing the active matrix personality.
+        if (detectedState != BehaviourState::IDLE)
         {
-            applyMatrixModeProfile(
-                currentMatrixMode,
-                matrixEntryEffectPending
+            applyBehaviourState(
+                detectedState,
+                true
             );
-
-            matrixEntryEffectPending = false;
-            matrixProfileNeedsApply = false;
         }
+    }
+    else if (detectedState != BehaviourState::IDLE)
+    {
+        // No new matrix personality needs applying.
+        // Update only the current sensor behaviour.
+        applyBehaviourState(
+            detectedState
+        );
     }
 
 
