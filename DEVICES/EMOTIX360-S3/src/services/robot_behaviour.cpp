@@ -461,7 +461,6 @@ void applyBehaviourState(
             );
 
             break;
-            break;
 
 
         // ----------------------------------------------------
@@ -844,8 +843,9 @@ void update(
         matrixEntryEffectPending =
             detectedMatrixMode != MatrixMode::IDLE &&
             detectedMatrixMode != MatrixMode::UNKNOWN;
-            // A new matrix mode replaces the previous entry event.
-            matrixEntryEffectGuardActive = false;
+
+        // A new matrix mode replaces the previous entry event.
+        matrixEntryEffectGuardActive = false;
 
         Serial.printf(
             "[ROBOT BEHAVIOUR] Matrix mode detected: %s\n",
